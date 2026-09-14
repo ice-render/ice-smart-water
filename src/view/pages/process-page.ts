@@ -13,6 +13,7 @@ import {
   ICEProgressBar,
   ICERadioGroup,
   ICEStatCard,
+  ICETag,
   ICEWidget,
 } from 'ice-web-components';
 import type { OperatingMode, OperatingModeId } from '../../domain';
@@ -20,6 +21,8 @@ import { OPERATING_MODES } from '../../domain';
 import type { AuditIssue } from '../../domain';
 import type { PlantKpi } from '../../domain';
 import type { FlowTrace } from '../../domain';
+import type { UnitInspector } from '../../domain';
+import { onUnitSelect, getSelectedUnit, inspectorProbe } from '../selection';
 import {
   CARD_INSET,
   PAGE_GAP,
@@ -27,6 +30,7 @@ import {
   bullet,
   cardBodyRect,
   createCard,
+  emptyBox,
   paragraph,
   sectionHeading,
   stackColumn,
@@ -35,6 +39,30 @@ import {
   type Rect,
   type ShellLayout,
 } from '../shell';
+
+/** 介质代号 → 中文（符号目录里是英文枚举，界面上给运行人员看中文） */
+const MEDIUM_LABELS: Record<string, string> = {
+  sewage: '污水',
+  effluent: '出水',
+  sludge: '污泥',
+  returnSludge: '回流污泥',
+  recycle: '混合液内回流',
+  air: '空气',
+  chemical: '药剂',
+  signal: '信号',
+  power: '动力',
+};
+function mediumLabelOf(m: string): string {
+  return MEDIUM_LABELS[m] || m;
+}
+
+/** 检视指标状态 → 进度条配色（与 ICE 主题一致） */
+const STATUS_COLOR: Record<string, string> = {
+  success: '#198754',
+  warning: '#ffc107',
+  error: '#dc3545',
+  info: '#0d6efd',
+};
 
 export type ProcessSnapshot = {
   kpi: PlantKpi;
@@ -51,7 +79,7 @@ export type ProcessPageDeps = {
 };
 
 const STAT_HEIGHT = 120;
-const CONSOLE_HEIGHT = 300;
+const CONSOLE_HEIGHT = 248;
 
 /**
  * 「工艺流程」卡片的矩形（纯函数）。
@@ -149,8 +177,8 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
   });
   page.addChild(graphCard, false);
 
-  /* ---------------- 右栏：运行控制台 + 运行要点 ---------------- */
-  const notesHeight = mainHeight - CONSOLE_HEIGHT - PAGE_GAP;
+  /* ---------------- 右栏：运行控制台 + 上下文卡（默认运行要点，选中单元时切单元检视） ---------------- */
+  const contextHeight = mainHeight - CONSOLE_HEIGHT - PAGE_GAP;
   const consoleRect: Rect = { left: x0 + leftWidth + PAGE_GAP, top: mainTop, width: rightWidth, height: CONSOLE_HEIGHT };
   const consoleCard = createCard({ id: 'console-card', rect: consoleRect, title: '运行控制台' });
   const consoleBody = new ICEWidget({ left: 0, top: 0, width: consoleRect.width, height: consoleRect.height, fill: false, stroke: false, interactive: false });
@@ -193,12 +221,19 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
     consoleBody.addChild(node, false)
   );
 
-  const notesRect: Rect = { left: x0 + leftWidth + PAGE_GAP, top: mainTop + CONSOLE_HEIGHT + PAGE_GAP, width: rightWidth, height: notesHeight };
-  const notesCard = createCard({ id: 'notes-card', rect: notesRect, title: '运行要点 / 审计摘要' });
-  const notesBody = new ICEWidget({ left: 0, top: 0, width: notesRect.width, height: notesRect.height, fill: false, stroke: false, interactive: false });
-  notesCard.addChild(notesBody, false);
+  const contextRect: Rect = { left: x0 + leftWidth + PAGE_GAP, top: mainTop + CONSOLE_HEIGHT + PAGE_GAP, width: rightWidth, height: contextHeight };
+  // 注意：id 保持 `notes-card` 不变 —— e2e 的版面体检护栏按这个 id 找卡片、审计正文溢出。
+  // 这张卡现在"默认运行要点、选中单元时切单元检视"，但体检只看"正文子节点不溢出卡片"，
+  // 两种内容都按同一套贪心 / 紧凑布局，不会溢出。
+  const contextCard = createCard({ id: 'notes-card', rect: contextRect, title: '运行要点 / 单元检视' });
+  // 正文容器相对卡片原点（卡片本身已在 contextRect 处，子节点不能再用绝对坐标，否则会叠两次偏移）
+  const contextBody = emptyBox({ left: 0, top: 0, width: contextRect.width, height: contextRect.height });
+  contextCard.addChild(contextBody, false);
   page.addChild(consoleCard, false);
-  page.addChild(notesCard, false);
+  page.addChild(contextCard, false);
+
+  /** 当前选中的单元（null = 没选，上下文卡显示运行要点） */
+  let selectedUnitId: string | null = getSelectedUnit();
 
   /* ---------------- 动态内容 ---------------- */
   function renderStats(snapshot: ProcessSnapshot): void {
@@ -234,11 +269,11 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
    * 之后，把审计条目一条条往里塞，塞不下的用"还有 N 条（详见「事件中心」）"收口 —— 任何工况都不会溢出。
    */
   function renderNotes(snapshot: ProcessSnapshot): void {
-    notesBody.removeChildren([...notesBody.childNodes]);
-    const width = notesRect.width - CARD_INSET * 2;
+    contextBody.removeChildren([...contextBody.childNodes]);
+    const width = contextRect.width - CARD_INSET * 2;
     const TOP = 52; // 正文起点（标题带下方）
     const FOOTER_H = 16;
-    const footerTop = notesRect.height - CARD_INSET - FOOTER_H;
+    const footerTop = contextRect.height - CARD_INSET - FOOTER_H;
     const bodyHeight = footerTop - TOP - 12; // 留给正文（不含页脚）的净高，含一点安全余量
 
     const modeTitle = new ICELabel({
@@ -282,7 +317,7 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
     const tail = hidden > 0 ? paragraph(ctx, { width, text: `…还有 ${hidden} 条（详见「事件中心」）`, fontSize: 11 } as any) : null;
 
     const stack = tail ? [...headItems, ...shown, tail] : [...headItems, ...shown];
-    stack.forEach((node) => notesBody.addChild(node, false));
+    stack.forEach((node) => contextBody.addChild(node, false));
     // 正文从标题带下方开始（卡片标题占 0~44）
     stackColumn(stack, { left: CARD_INSET, top: TOP, width, gap: 5, gapAfter: (index) => (index === 0 ? 4 : 0) });
 
@@ -291,7 +326,7 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
       text: `停运单元 ${snapshot.idleCount} 个 · 走线 ${snapshot.trace.path.length} 个单元`,
       style: { fontSize: 11, fillStyle: theme.colors.textTertiary },
     });
-    notesBody.addChild(footer, false);
+    contextBody.addChild(footer, false);
     footer.setState({ left: CARD_INSET, top: footerTop });
   }
 
@@ -304,13 +339,157 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
     oxygenText.setText(`需氧 ${Math.round(snapshot.kpi.oxygenDemand)} kgO₂/d · 供气 ${Math.round(snapshot.kpi.airDemand).toLocaleString()} m³/d`);
   }
 
+  /**
+   * 单元检视：把"当前选中的处理单元"画成一份属性面板。
+   *
+   * 这里刻意**复用同一套 ice-web-components**（ICETag / ICEDescriptions / ICEProgressBar /
+   * ICELabel / sectionHeading / bullet）—— 和设计器、事件中心用的是同一组控件库，
+   * 只是数据来源从"整厂快照"换成"单个单元"。这正是 ICE 家族"组件层面一致性"的落点：
+   * 选中工艺图上的任何一台设备，右侧立刻用和别处一模一样的卡片把它的指标 / 巡检要点 / 关联报警摆出来。
+   */
+  function renderInspector(info: UnitInspector): void {
+    contextBody.removeChildren([...contextBody.childNodes]);
+    const width = contextRect.width - CARD_INSET * 2;
+    const left = CARD_INSET;
+    let y = 6;
+
+    // 顶部：状态标签 + 名称（位号），阀门再补一个开闭状态
+    const statusText = info.idle ? '停用' : info.valveState ? (info.valveState === 'closed' ? '已关闭' : '运行中') : '运行中';
+    const statusTag = new ICETag({
+      left,
+      top: y,
+      width: 64,
+      height: 22,
+      text: statusText,
+      status: info.idle ? 'warning' : 'success',
+      variant: 'soft',
+    });
+    contextBody.addChild(statusTag, false);
+    const nameLabel = new ICELabel({
+      left: left + 72,
+      top: y + 1,
+      width: width - 72,
+      text: `${info.name}（${info.tag}）`,
+      style: { fontSize: 13, fontWeight: '600', fillStyle: theme.colors.text },
+    });
+    contextBody.addChild(nameLabel, false);
+    y += 28;
+
+    // 身份描述（同一套 ICEDescriptions）
+    const desc = new ICEDescriptions({
+      left,
+      top: y,
+      width,
+      column: 1,
+      items: [
+        { label: '类型', value: info.catalog.label },
+        { label: '位号代号', value: info.catalog.tag },
+        { label: '介质', value: info.catalog.mediums.map(mediumLabelOf).join(' / ') },
+      ],
+    });
+    contextBody.addChild(desc, false);
+    y += 3 * 32;
+
+    // 运行指标（同一套 ICEProgressBar，按设计区间上色）
+    if (info.metrics.length) {
+      contextBody.addChild(sectionHeading(ctx, left, y, '运行指标'), false);
+      y += 20;
+      info.metrics.forEach((m) => {
+        const label = new ICELabel({
+          left,
+          top: y,
+          width: 72,
+          text: m.label,
+          style: { fontSize: 11, fillStyle: theme.colors.textSecondary },
+        });
+        const bar = new ICEProgressBar({
+          left: left + 76,
+          top: y + 4,
+          width: width - 76 - 78,
+          height: 8,
+          value: Math.round(m.ratio * 100),
+          max: 100,
+          color: STATUS_COLOR[m.status],
+        });
+        const value = new ICELabel({
+          left: left + width - 74,
+          top: y,
+          width: 72,
+          text: m.value,
+          style: { fontSize: 10, fillStyle: theme.colors.textTertiary },
+        });
+        contextBody.addChild(label, false);
+        contextBody.addChild(bar, false);
+        contextBody.addChild(value, false);
+        y += 20;
+      });
+    }
+
+    // 设计关注（最多 2 条，避免把卡片撑爆）
+    const focus = info.designFocus.slice(0, 2);
+    if (focus.length) {
+      contextBody.addChild(sectionHeading(ctx, left, y, '设计关注'), false);
+      y += 18;
+      focus.forEach((text) => {
+        const node = bullet(ctx, { left, top: y, width, text, fontSize: 10 } as any);
+        contextBody.addChild(node, false);
+        y += (Number(node.state.height) || 18) + 3;
+      });
+    }
+
+    // 关联诊断：运行审计 + 报警，按级别合并（最多 2 条）
+    const diag = [
+      ...info.auditIssues.map((i) => ({ level: i.level, text: i.message })),
+      ...info.alarms.map((a) => ({ level: a.level === 'critical' ? 'error' : 'warning', text: a.title })),
+    ].slice(0, 2);
+    if (diag.length) {
+      contextBody.addChild(sectionHeading(ctx, left, y, '关联诊断'), false);
+      y += 18;
+      diag.forEach((d) => {
+        const node = paragraph(ctx, {
+          left,
+          top: y,
+          width,
+          text: `${d.level === 'error' ? '❌' : '⚠️'} ${d.text}`,
+          fontSize: 10,
+          color: d.level === 'error' ? theme.colors.error : theme.colors.warning,
+        } as any);
+        contextBody.addChild(node, false);
+        y += (Number(node.state.height) || 18) + 3;
+      });
+    } else {
+      const ok = paragraph(ctx, { left, top: y, width, text: '✅ 无关联运行问题', fontSize: 10, color: theme.colors.success } as any);
+      contextBody.addChild(ok, false);
+      y += (Number(ok.state.height) || 16) + 3;
+    }
+  }
+
+  /** 上下文卡：没选中单元时显示运行要点，选中时切换到单元检视 */
+  function renderContext(snapshot: ProcessSnapshot, unitId: string | null): void {
+    if (unitId) {
+      const info = inspectorProbe(unitId);
+      if (info) {
+        renderInspector(info);
+        return;
+      }
+    }
+    renderNotes(snapshot);
+  }
+
   function refresh(): void {
     const snapshot = deps.snapshot();
     renderStats(snapshot);
     renderConsole(snapshot);
-    renderNotes(snapshot);
+    renderContext(snapshot, selectedUnitId);
   }
   refresh();
+
+  // 订阅统一选择总线：工艺图 / 事件中心 / 符号库的选中变化都汇聚到这里，
+  // 右侧上下文卡随之在「运行要点」与「单元检视」之间切换 —— 一处选中，处处联动。
+  onUnitSelect((id) => {
+    selectedUnitId = id;
+    renderContext(deps.snapshot(), id);
+  });
 
   // 岛：工艺图挖在卡片正文区
   return {

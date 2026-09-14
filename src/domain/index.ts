@@ -12,6 +12,7 @@ export * from './process-model';
 export * from './operating-modes';
 export * from './plant-audit';
 export * from './symbol-catalog';
+export * from './unit-inspector';
 export * from './daily-profile';
 export * from './live-signal';
 export * from './sizing';

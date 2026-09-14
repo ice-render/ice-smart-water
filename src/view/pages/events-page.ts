@@ -51,6 +51,10 @@ export type EventsPageDeps = {
   onClose: (id: string) => void;
   /** 处置人（写进处置轨迹） */
   operator: () => string;
+  /** 跳到工艺图并选中该报警关联单元（跨视图联动） */
+  onLocate?: (unitId: string) => void;
+  /** 该报警是否能在工艺图上定位（单元在不在图上） */
+  canLocate?: (unitId: string) => boolean;
 };
 
 export type EventsPageHandle = PageHandle & {
@@ -185,16 +189,16 @@ export function buildEventsPage(ctx: PageContext, deps: EventsPageDeps): EventsP
       {
         key: 'action',
         title: '处置',
-        width: 104,
+        width: 180,
         renderCell: (value: string, row: any) => {
           const event = rowFor(String(row.id));
-          const cell = new ICEWidget({ left: 0, top: 0, width: 96, height: 30, fill: false, stroke: false, interactive: false });
+          const cell = new ICEWidget({ left: 0, top: 0, width: 172, height: 30, fill: false, stroke: false, interactive: false });
           const closed = event ? event.status === 'closed' : false;
           const button = new ICEButton({
             id: `alarm-action-${row.id}`,
             left: 0,
             top: 4,
-            width: 92,
+            width: 84,
             height: 28,
             text: closed ? '已闭环' : event && event.status === 'open' ? '派单' : '闭环',
             size: 'small',
@@ -218,6 +222,23 @@ export function buildEventsPage(ctx: PageContext, deps: EventsPageDeps): EventsP
             });
           }
           cell.addChild(button, false);
+          // 跨视图联动：定位到工艺图上关联的单元（同一套选择总线驱动右侧单元检视）
+          if (event && deps.canLocate && deps.canLocate(String(event.unitId))) {
+            const locate = new ICEButton({
+              id: `alarm-locate-${row.id}`,
+              left: 90,
+              top: 4,
+              width: 78,
+              height: 28,
+              text: '定位',
+              size: 'small',
+              variant: 'text',
+            });
+            locate.on('click', () => {
+              if (deps.onLocate) deps.onLocate(String(event.unitId));
+            });
+            cell.addChild(locate, false);
+          }
           return cell;
         },
       },

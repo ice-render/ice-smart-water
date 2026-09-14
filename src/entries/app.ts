@@ -91,6 +91,7 @@ import {
 import { buildCalcPage, curveIslandRect, type CalcPageHandle } from '../view/pages/calc-page';
 import { buildEventsPage, type EventsPageHandle } from '../view/pages/events-page';
 import { graphOfDesigner } from '../view/adapter';
+import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
 
 function need<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -384,6 +385,21 @@ function refreshAlarms(): void {
   if (eventsPage) eventsPage.reload();
 }
 
+/** 报警关联单元在不在工艺图上（事件中心「定位」按钮的可用性判断） */
+function canLocateUnit(unitId: string): boolean {
+  return graphOfDesigner(designer).nodes.some((node: any) => node.id === unitId);
+}
+
+/** 跨视图联动：从事件中心跳到工艺图，并选中该报警关联的单元（同一选择总线驱动右侧检视） */
+function locateUnit(unitId: string): void {
+  if (!canLocateUnit(unitId)) {
+    shell.toast('该报警单元不在工艺图上', 'warning');
+    return;
+  }
+  shell.show('process');
+  selectUnit(unitId, { source: 'events' });
+}
+
 /* ================= 案例装载与工况 ================= */
 
 function buildCase(): void {
@@ -475,6 +491,10 @@ function selectSymbol(entry: SymbolEntry): void {
   selectedSymbol = entry;
   legend.highlight(entry.kind);
   if (legendPage) legendPage.setSelection(entry, matchedSymbols());
+  // 跨视图联动：在符号库里选中一个符号 → 工艺图上同类型的真实单元一并被选中
+  // （走统一选择总线，右侧检视面板随之切换；与事件中心「定位」共用同一份选中状态）
+  const unit = graphOfDesigner(designer).nodes.find((node: any) => node.kind === entry.kind);
+  if (unit) selectUnit(unit.id, { source: 'legend' });
   shell.toast(`${entry.label}（${entry.kind}）· 位号代号 ${entry.tag}`, 'info');
 }
 
@@ -753,6 +773,9 @@ const shell = mountShell({
             alarms = closeAlarm(alarms, id, operatorName);
           },
           operator: () => operatorName,
+          // 跨视图联动：事件中心「定位」→ 跳工艺图并走统一选择总线选中关联单元
+          onLocate: locateUnit,
+          canLocate: canLocateUnit,
         });
         return eventsPage;
       },
@@ -814,7 +837,39 @@ const shell = mountShell({
   onFabItem: handleAction,
 });
 
-designer.subscribe(() => scheduleRecompute());
+let suppressRecompute = false;
+
+// 设计器里的任何变更（拖拽 / 改阀 / 载入 / undo / redo）→ 重算（除非是"选择联动"主动压制的那一次）
+designer.subscribe(() => {
+  if (suppressRecompute) {
+    suppressRecompute = false;
+    return;
+  }
+  scheduleRecompute();
+});
+// 设计器选中变化 → 同步到【统一选择总线】（不触发重算）
+designer.subscribe((_snapshot, d) => {
+  selectUnit(d.selectedId);
+});
+
+// 【统一选择总线】选中变化 → 反向高亮设计器上的节点（若不同才动，避免回环）
+onUnitSelect((id) => {
+  if (designer.selectedId !== id) {
+    suppressRecompute = true;
+    designer.select(id);
+  }
+});
+
+// 注入检视数据源：业务状态都在这几个模块级变量里，运行时提供给检视探针（不反向依赖引擎）
+setInspectorSource(() => ({
+  graph: graphOfDesigner(designer),
+  designs,
+  meta,
+  kpi,
+  hydraulics,
+  issues,
+  alarms,
+}));
 
 /* ================= 图例上的点选 ================= */
 
@@ -953,5 +1008,13 @@ else login.show();
       alarms = closeAlarm(alarms, id, operatorName);
       if (eventsPage) eventsPage.reload();
     },
+  },
+  // 统一选择总线（端到端测试 / 调试入口）
+  selection: {
+    get current() {
+      return getSelectedUnit();
+    },
+    select: (id: string | null) => selectUnit(id),
+    probe: (id?: string | null) => inspectorProbe(id ?? undefined),
   },
 };
