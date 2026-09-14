@@ -1,0 +1,44 @@
+{
+  "name": "ice-smart-water",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "author": "大漠穷秋 <damoqiongqiu@126.com>",
+  "description": "智慧水务应用：给排水工艺流程设计与运行监视。渲染、图表、画布控件、领域设计器全部取自 ICE 家族，本仓只写水务业务。",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ice-render/ice-smart-water.git"
+  },
+  "scripts": {
+    "start": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "serve": "http-server dist -p 8092 -c-1",
+    "types:check": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:e2e": "npm run build && playwright test",
+    "verify": "npm run types:check && npm test && npm run build"
+  },
+  "dependencies": {
+    "@damoqiongqiu/ice-chart": "file:../ice-chart",
+    "ice-entity-designer": "file:../ice-entity-designer",
+    "ice-render": "file:../ice-render",
+    "ice-web-components": "file:../ice-web-components"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/jest": "29.5.14",
+    "html-webpack-plugin": "^5.6.0",
+    "http-server": "^14.1.1",
+    "jest": "29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-loader": "^9.5.1",
+    "typescript": "5.9.3",
+    "webpack": "^5.90.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  }
+}
