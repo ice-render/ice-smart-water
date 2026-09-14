@@ -1,0 +1,93 @@
+name: Deploy to GitHub Pages
+
+# 推到 master 即构建并部署到 GitHub Pages；PR 只做构建校验（不部署）；也可手动触发。
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 允许一个并发部署，跳过进行中的旧部署
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+# ICE 家族是四个**并列仓库**（不是 monorepo）：
+# 应用在构建期把 ice-render / ice-web-components / ice-chart / ice-entity-designer
+# 通过 webpack alias 指到**同级目录**，且四个家族包的产物都把 ice-render 保持为 external
+# （由宿主提供同一份引擎实例）。所以 CI 必须把它们签成「兄弟目录」，并按依赖顺序各自构建。
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 签出应用（ice-smart-water）
+        uses: actions/checkout@v4
+        with:
+          path: ice-smart-water
+
+      - name: 签出家族依赖（引擎 + 控件 + 图表 + 实体设计器）
+        uses: actions/checkout@v4
+        with:
+          repository: ice-render/ice-render
+          ref: master
+          path: ice-render
+      - uses: actions/checkout@v4
+        with:
+          repository: ice-render/ice-web-components
+          ref: main
+          path: ice-web-components
+      - uses: actions/checkout@v4
+        with:
+          repository: ice-render/ice-chart
+          ref: main
+          path: ice-chart
+      - uses: actions/checkout@v4
+        with:
+          repository: ice-render/ice-entity-designer
+          ref: master
+          path: ice-entity-designer
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: 构建引擎与家族包（按依赖顺序，ice-render 最先）
+        run: |
+          set -e
+          for d in ice-render ice-web-components ice-chart ice-entity-designer; do
+            echo "::group::build $d"
+            (cd "$d" && npm ci && npm run build)
+            echo "::endgroup::"
+          done
+
+      - name: 安装并构建应用
+        run: |
+          cd ice-smart-water
+          npm ci
+          npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ice-smart-water/dist
+
+  deploy:
+    needs: build
+    # 只在 master 上部署（PR 只构建校验）
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
