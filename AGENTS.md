@@ -108,8 +108,12 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
   控制台留一条 error，e2e 的"零报错"就废了。
 - **画布尺寸要扣掉 body 的 padding**：`window.innerWidth` 不扣，加上 24px 内边距就是一条永远消不掉的
   横向滚动条。见 `measureCanvas()`。
-- **`ICELabel` + `style.wrap`** 才能换行；构造期的高度来自 DOM 兜底测量（长中文会偏大），
-  所以"卡要留多高"用 `estimateTextHeight()` 估，别信构造期实测。
+- **`ICELabel` + `style.wrap`** 才能换行；**`ICELabel` 构造后 `state.height` 只等于单行高**，
+  即使文本实际渲染成两行，它也只认 18px。所以用 `paragraph()` 这类辅助函数时，
+  必须**把 `estimateTextHeight()` 的结果显式设到 `height` 上**，否则 `stackColumn()` 会按单行高排，
+  文本第二行直接糊到下一个节点上（工艺流程图页「雨季超越」的审计条目以前就是这样压字的）。
+- **ASCII 词组（数字 + 单位 + 标点）别太乐观地按 0.55em 估**：`m³/(m²·h)` 这类串实际占宽比想象大，
+  `estimateTextHeight()` 里按 0.7em 估 + `perLine` 打 9 折，才稳。
 - **画布文本控件聚焦时会挂一个原生 `<input>` 替身**盖在自己身上（键盘输入走它）：
   - 断言"鼠标落在某个画布上"时要允许 `INPUT`/`TEXTAREA`，否则一聚焦就误判；
   - e2e 想验真实输入就得"先点输入框再 `page.keyboard.type()`"，直接 `setValue()` 等于跳过整条链路；

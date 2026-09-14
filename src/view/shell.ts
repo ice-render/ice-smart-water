@@ -580,17 +580,30 @@ export function place(node: any, rect: Rect): any {
  * 为什么不用实测：`ICEText` 构造期还没有 canvas 上下文，走 DOM 兜底测量，
  * 长中文串会被量得**偏大**（组件库自己的注释里记着实测 418 vs 真实 228）。
  * 用它来估"卡片要留多高"足够稳；真正的换行由引擎按 `style.wrap` 做。
- * 口径：CJK 一字约 1em，ASCII 约 0.55em。
+ *
+ * 口径：
+ * - CJK / 全角符号 / 上标数字：一字约 1em；
+ * - ASCII（英文、数字、标点、空格、emoji）：按 0.7em 估（实测 0.55 会偏乐观，
+ *   因为 `ICELabel` 对 ASCII 词组会按词边界换行，不能把长数字串压在一行）；
+ * - `perLine` 再 ×0.9 留安全余量，避免"估 1 行实际 2 行"导致压字。
  */
 export function estimateTextHeight(text: string, width: number, fontSize: number, lineHeight: number): number {
-  const perLine = Math.max(1, Math.floor(width / fontSize));
+  const perLine = Math.max(1, Math.floor((width / fontSize) * 0.9));
   let lines = 0;
   String(text || '')
     .split('\n')
     .forEach((paragraph) => {
       let units = 0;
       for (const char of paragraph) {
-        units += char.charCodeAt(0) > 0x2e80 ? 1 : 0.55;
+        const code = char.charCodeAt(0);
+        // CJK 统一表意符号 / 全角符号 / 上标/下标/货币等块（常见中文、日文、韩文、全角标点）
+        const cjk =
+          (code >= 0x2e80 && code <= 0x9fff) ||
+          (code >= 0xac00 && code <= 0xd7ff) ||
+          (code >= 0xf900 && code <= 0xfaff) ||
+          (code >= 0xfe30 && code <= 0xfe4f) ||
+          (code >= 0xff00 && code <= 0xffef);
+        units += cjk ? 1 : 0.7;
       }
       lines += Math.max(1, Math.ceil(units / perLine));
     });
@@ -601,10 +614,12 @@ export function estimateTextHeight(text: string, width: number, fontSize: number
 export function paragraph(ctx: PageContext, rect: Omit<Rect, 'height'> & { text: string; fontSize?: number; color?: string }): any {
   const fontSize = rect.fontSize || 12;
   const lineHeight = Math.round(fontSize * 1.6);
+  const height = estimateTextHeight(rect.text, rect.width, fontSize, lineHeight);
   return new ICELabel({
     left: rect.left,
     top: rect.top,
     width: rect.width,
+    height,
     text: rect.text,
     style: { fontSize, wrap: true, lineHeight, fillStyle: rect.color || ctx.theme.colors.textSecondary },
   });
@@ -612,17 +627,31 @@ export function paragraph(ctx: PageContext, rect: Omit<Rect, 'height'> & { text:
 
 /** 小节标题（卡片内部用） */
 export function sectionHeading(ctx: PageContext, left: number, top: number, text: string): any {
+  const fontSize = 12;
   return new ICELabel({
     left,
     top,
     text,
-    style: { fontSize: 12, fontWeight: '600', fillStyle: ctx.theme.colors.textSecondary },
+    height: Math.round(fontSize * 1.6),
+    style: { fontSize, fontWeight: '600', fillStyle: ctx.theme.colors.textSecondary },
   });
 }
 
 /** 一条要点：`• 文字`，自动换行 */
 export function bullet(ctx: PageContext, rect: { left: number; top: number; width: number; text: string }): any {
   return paragraph(ctx, { ...rect, text: `• ${rect.text}` });
+}
+
+/**
+ * 给没有设置高度的 ICELabel 补一个合适高度（单行）。
+ *
+ * `sectionHeading()` 这种只传文本的标题，构造后没有 `height`，`stackColumn` 会把它当成 0 高。
+ * 构造完补一下即可。
+ */
+export function fixLabelHeight(node: any, fontSize: number = 12): void {
+  if (node && node.state && !node.state.height) {
+    node.setState({ height: Math.round(fontSize * 1.6) });
+  }
 }
 
 export type CardOptions = {

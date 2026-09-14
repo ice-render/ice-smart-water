@@ -84,6 +84,11 @@ test('菜单：父项也会跳到对应页 + 提示，二级项切工况后跳�
   expect(state.page).toBe('process');
   expect(state.mode).toBe('rain');
   expect(state.bypass).toBe('open');
+
+  // 关键回归：雨季超越会产生审计条目（多条、带长数字），这些条目以前因为高度估少而互相压字
+  const audit = await layoutAudit(page);
+  expect(audit.hits, `切到雨季超越后，工艺流程图页有图元相交：\n${audit.hits.join('\n')}`).toEqual([]);
+  expect(audit.outside, `切到雨季超越后，工艺流程图页有图元冲出内容区：\n${audit.outside.join('\n')}`).toEqual([]);
   expect((page as any).__errors).toEqual([]);
 });
 
