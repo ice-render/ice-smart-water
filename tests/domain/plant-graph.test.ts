@@ -13,14 +13,22 @@ import { applyModeToGraph, modeById } from '../../src/domain/operating-modes';
 describe('工艺图：走线、连通性、邻接', () => {
   const graph = toPlantGraph(SEWAGE_PLANT);
 
-  it('案例覆盖 21 种符号里的常用组合，且每段管线两端都存在', () => {
-    expect(graph.nodes.length).toBeGreaterThanOrEqual(22);
+  it('案例覆盖给排水符号库里的常用组合，且每段管线两端都存在', () => {
+    expect(graph.nodes.length).toBeGreaterThanOrEqual(34);
     const ids = new Set(graph.nodes.map((node) => node.id));
     graph.pipes.forEach((pipe) => {
       expect(ids.has(pipe.sourceId)).toBe(true);
       expect(ids.has(pipe.targetId)).toBe(true);
+      if (pipe.medium === 'signal' || pipe.medium === 'power') {
+        // 信号线与动力线不是管道：没有管径，标注也不带 DN
+        expect(pipe.dn).toBe('');
+        return;
+      }
       expect(pipe.dn).toMatch(/^DN\d+$/);
     });
+    // 信号 / 动力线必须在图上（仪表与变频器的接线）
+    const circuits = graph.pipes.filter((pipe) => pipe.medium === 'signal' || pipe.medium === 'power');
+    expect(circuits.length).toBe(3);
   });
 
   it('正常运行工况下，进水能走到出水，走线是主流程', () => {
@@ -33,6 +41,7 @@ describe('工艺图：走线、连通性、邻接', () => {
     expect(trace.path).toEqual([
       'inlet',
       'pump',
+      'checkValve',
       'screen',
       'grit',
       'primary',

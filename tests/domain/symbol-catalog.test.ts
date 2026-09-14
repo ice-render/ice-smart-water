@@ -35,21 +35,32 @@ const EXPECTED_KINDS = [
   'analyzer',
   'inlet',
   'outlet',
+  // 2026-09-14 上游（ice-entity-designer）补齐的 10 个图元
+  'storageTank',
+  'deodorizer',
+  'sludgeSilo',
+  'submersiblePump',
+  'screwPump',
+  'vfd',
+  'motorValve',
+  'checkValve',
+  'levelGauge',
+  'pressureGauge',
 ];
 
 describe('符号业务目录', () => {
-  it('覆盖给排水域包的全部 21 种符号', () => {
+  it('覆盖给排水域包的全部 31 种符号', () => {
     expect(Object.keys(SYMBOL_CATALOG).sort()).toEqual(EXPECTED_KINDS.slice().sort());
-    expect(allSymbols().length).toBe(21);
+    expect(allSymbols().length).toBe(31);
   });
 
-  it('四个分类的计数加起来是 21，且与分类内符号数一致', () => {
+  it('四个分类的计数加起来是 31，且与分类内符号数一致', () => {
     const stats = categoryStats();
     expect(stats.map((item) => item.id)).toEqual(SYMBOL_CATEGORIES.map((item) => item.id));
-    expect(stats.reduce((total, item) => total + item.count, 0)).toBe(21);
-    expect(symbolsOfCategory('water').length).toBe(10);
-    expect(symbolsOfCategory('sludge').length).toBe(3);
-    expect(symbolsOfCategory('equipment').length).toBe(6);
+    expect(stats.reduce((total, item) => total + item.count, 0)).toBe(31);
+    expect(symbolsOfCategory('water').length).toBe(12);
+    expect(symbolsOfCategory('sludge').length).toBe(4);
+    expect(symbolsOfCategory('equipment').length).toBe(13);
     expect(symbolsOfCategory('boundary').length).toBe(2);
   });
 
@@ -81,7 +92,7 @@ describe('符号业务目录', () => {
       if (conflict) throw new Error(`代号 ${entry.tag} 被 ${conflict} 与 ${entry.kind} 同时占用`);
       seen.set(entry.tag, entry.kind);
     });
-    expect(seen.size).toBe(21);
+    expect(seen.size).toBe(31);
   });
 
   it('介质引用不出现空值（介质词典在 water_shapes 里，这里是引用方）', () => {

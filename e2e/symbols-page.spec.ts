@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForTimeout(400);
 });
 
-test('图例：21 种符号全部渲染，分类计数 10 / 3 / 6 / 2', async ({ page }) => {
+test('图例：31 种符号全部渲染，分类计数 12 / 4 / 13 / 2', async ({ page }) => {
   const state = await page.evaluate(() => {
     const symbols = (window as any).__water;
     return {
@@ -35,12 +35,12 @@ test('图例：21 种符号全部渲染，分类计数 10 / 3 / 6 / 2', async ({
       cells: symbols.legend.getLayout().cells.length,
     };
   });
-  expect(state.total).toBe(21);
-  expect(state.cells).toBe(21);
+  expect(state.total).toBe(31);
+  expect(state.cells).toBe(31);
   expect(state.stats).toEqual([
-    ['water', 10],
-    ['sludge', 3],
-    ['equipment', 6],
+    ['water', 12],
+    ['sludge', 4],
+    ['equipment', 13],
     ['boundary', 2],
   ]);
   expect((page as any).__errors).toEqual([]);
@@ -51,7 +51,7 @@ test('与域包的符号预设一一对应（奇偶校验放在这里做，单�
     const symbols = (window as any).__water;
     return { presets: Object.keys(symbols.presets || {}).length, catalog: symbols.symbolTotal };
   });
-  expect(parity.presets).toBe(21);
+  expect(parity.presets).toBe(31);
   expect(parity.catalog).toBe(parity.presets);
   expect((page as any).__errors).toEqual([]);
 });
@@ -83,7 +83,7 @@ test('点图例里的符号：点亮该格并带出业务语义（作用 / 设�
   expect((page as any).__errors).toEqual([]);
 });
 
-test('侧栏分类菜单（画布控件）：点「污泥线单元」只剩 3 个符号', async ({ page }) => {
+test('侧栏分类菜单（画布控件）：点「污泥线单元」只剩 4 个符号', async ({ page }) => {
   await clickSubmenu(page, "window.__water.shell.find('menu')", 'cats', 'filter:sludge');
   const state = await page.evaluate(() => {
     const cells = (window as any).__water.legend.getLayout().cells;
@@ -94,12 +94,12 @@ test('侧栏分类菜单（画布控件）：点「污泥线单元」只剩 3 �
     };
   });
   expect(state.filter).toBe('sludge');
-  expect(state.count).toBe(3);
+  expect(state.count).toBe(4);
   expect(state.categories).toEqual(['sludge']);
   expect((page as any).__errors).toEqual([]);
 });
 
-test('卡片里的分段控件（画布控件）：切到「设备」只剩 6 个符号', async ({ page }) => {
+test('卡片里的分段控件（画布控件）：切到「设备」只剩 13 个符号', async ({ page }) => {
   // ICESegmented 的每一档是一个按钮子节点；第 4 档是「设备」（全部/水线/泥线/设备/边界）
   // 注意：表达式在浏览器里求值，必须写纯 JS
   await clickWidget(page, '#canvas-shell', "window.__water.shell.find('symbol-filter').childNodes[3]");
@@ -108,7 +108,7 @@ test('卡片里的分段控件（画布控件）：切到「设备」只剩 6 �
     return { count: cells.length, filter: (window as any).__water.currentFilter() };
   });
   expect(state.filter).toBe('equipment');
-  expect(state.count).toBe(6);
+  expect(state.count).toBe(13);
   expect((page as any).__errors).toEqual([]);
 });
 
@@ -117,7 +117,7 @@ test('顶栏「导出 SVG」：导出后画面恢复，SVG 里有符号图形', 
   const svg = await page.evaluate(() => (window as any).__exportedSvg || '');
   expect(svg.length).toBeGreaterThan(2000);
   const cells = await page.evaluate(() => (window as any).__water.legend.getLayout().cells.length);
-  expect(cells).toBe(21);
+  expect(cells).toBe(31);
   expect((page as any).__errors).toEqual([]);
 });
 

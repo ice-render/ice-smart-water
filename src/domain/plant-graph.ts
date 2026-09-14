@@ -83,8 +83,17 @@ export function nodesOfKind(graph: PlantGraph, kind: WaterSymbolKind): PlantNode
 }
 
 /** 关断的阀门：不通行 */
+/**
+ * 阀门类图元（关断即断流）。
+ *
+ * **与上游同口径**：`ice-entity-designer` 的 `WATER_VALVE_KINDS = ['valve', 'motorValve']` ——
+ * 电动阀只是驱动方式不同，在"通不通"这件事上和手动阀完全等价。
+ * 这里不 import 那个常量（domain 层零运行时依赖），只镜像它的取值并在此说明。
+ */
+export const VALVE_KINDS: WaterSymbolKind[] = ['valve', 'motorValve'];
+
 export function isBlockingValve(node: PlantNode | null): boolean {
-  return !!node && node.kind === 'valve' && node.valveState === 'closed';
+  return !!node && VALVE_KINDS.indexOf(node.kind) !== -1 && node.valveState === 'closed';
 }
 
 /** 邻接表（无向 —— 走线只关心"通不通"，不关心水流方向） */

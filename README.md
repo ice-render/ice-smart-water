@@ -12,11 +12,14 @@
 工艺流程图 / 运行数据 / 符号库是壳里的三个页签（`display` 切换，不重新加载页面），
 切页时只把对应的"岛"摆出来。进应用先过**登录门**（见下）。
 
-| 页签 | 是什么 | 页里的岛 |
-|---|---|---|
-| **工艺流程图** | 全流程编辑器：P&ID 编辑 + 图纸校验 + 流径分析 + 实时指标（5 张统计卡） | 工艺图（设计器） |
-| **运行数据** | 24 小时进出水趋势 + 沿程水量与负荷 + 出水达标对照 + 运行审计 | 24 小时看板（`ice-chart`） |
-| **符号库** | 21 种给排水符号的图例 + 业务语义（作用 / 设计关注 / 巡检要点）+ 分类筛选 | 符号图例（设计器） |
+| 页签 | 是什么 | 页里的岛 | 主用的家族能力 |
+|---|---|---|---|
+| **工艺流程图** | 全流程编辑器：P&ID 编辑（34 个单元 / 37 段管线，含信号与动力线）+ 图纸校验 + 流径分析 + 实时指标 | 工艺图（设计器） | `WaterProcessDesigner`、`ICEStatCard`、卡片 `extra` 插槽 |
+| **运行数据** | 24 小时进出水趋势 + 沿程水量与负荷 + 出水达标对照 + 运行审计 | 24 小时看板 | `ICETable` 分页/空态、`ice-chart` 双 y 轴 |
+| **实时监视** | 模拟 SCADA 推送：6 个点位读数 + 三线滑动窗口趋势 + 溶解氧仪表 + 生化池分区热力图 | 趋势 / 仪表 / 热力图 | `appendData` 滑动窗口、`gauge`、`heatmap`、`ICESegmented`、`ICEButton` |
+| **工艺试算** | 工程师调参台：R / r / MLSS / 水温 / 负荷率 → 脱氮上界、泥龄、需氧、电耗、达标裕度 | 试算曲线 | `ICEForm` + 校验、`ICEInputNumber`、`ICESlider`、`ICEStatistic`、`function` 系列 + **`sweep` 参数扫动** |
+| **事件中心** | 报警工单闭环：多选批量派单 + 行展开看处置轨迹 + 二次确认 + 通知 | — | `ICETable`（多选/展开/汇总/列筛选/自定义单元格）、`ICETimeline`、`attachPopconfirm`、`ICENotification` |
+| **符号库** | **31 种**给排水符号的图例 + 业务语义（作用 / 设计关注 / 巡检要点）+ 分类筛选 | 符号图例 | 域包符号库 + `ICESegmented` |
 
 内容由 `ice-entity-designer` 的两个示例（`examples/water-editor.html` / `water-symbols.html`）
 迁移而来，但迁移后不再是两段写在 HTML 里的脚本，而是**一个工程里的三个页签**。
@@ -38,8 +41,8 @@
 |---|---|---|
 | `ice-render` | 画布引擎：命中测试、拖拽、视口缩放平移、脏矩形局部重绘、矢量导出 | 不碰渲染管线、不写变换矩阵 |
 | `ice-entity-designer` | 水工艺域设计器 `WaterProcessDesigner`：符号库 / 管线 / 走线 / 图纸校验 / 快照 / SVG | 不重写图元、不重写连线 |
-| `ice-web-components` | 运行控制台：指标卡（`ICEStatCard`）、工况选择（`ICERadioGroup`）、分类筛选（`ICESegmented`）、状态标签（`ICETag`） | 不画按钮、不做主题 token |
-| `ice-chart` | 运行看板：24 小时进出水趋势（双 y 轴折线 + 面积）、符号库构成柱状图 | 不写绘制代码，只给声明式 option |
+| `ice-web-components` | 全部界面：侧栏菜单（`ICEMenu`）、面包屑、卡片（`ICECard`）、指标卡（`ICEStatCard`）、统计数（`ICEStatistic`）、表格（`ICETable` 多选/展开/汇总/列筛选/自定义单元格）、表单（`ICEForm` + `ICEFormItem` 校验）、滑块 / 数字框 / 分段控件 / 开关 / 标签、时间线、抽屉、二次确认、通知与消息 | 不画按钮、不做主题 token |
+| `ice-chart` | 四种图：24 小时报表（双 y 轴折线 + 面积）、实时趋势（**`appendData` 滑动窗口**）、仪表（`gauge` 弹簧指针）、分区热力图（`heatmap` 滚动）、工艺试算曲线（`function` 系列 + **`sweep` 参数扫动** + `scatter` 工作点） | 不写绘制代码，只给声明式 option |
 
 **本仓只写业务**：`src/domain` 里的厂站数据、水量平衡、污泥平衡、需氧量、能耗、沿程水质、
 运行工况、运行审计、符号业务目录。这一层**零运行时依赖**（只用兄弟包的类型），
@@ -132,8 +135,11 @@ src/
     process-model.ts    水量平衡 / HRT / 表面负荷 / 污泥平衡 / 需氧量 / 能耗 / 沿程水质 / 24h 模拟
     operating-modes.ts  运行工况：阀位 + 停运单元 + 水量水质修正 + 运行要点
     plant-audit.ts      运行审计：达标、裕度、停运影响、负荷与泥龄校核
-    symbol-catalog.ts   21 种符号的业务目录（分类 / 位号代号 / 介质 / 作用 / 巡检要点）+ 位号规则
+    symbol-catalog.ts   31 种符号的业务目录（分类 / 位号代号 / 介质 / 作用 / 巡检要点）+ 位号规则
     daily-profile.ts    日变化曲线（均值归一化为 1）+ 确定性伪随机（同种子同曲线）
+    live-signal.ts      实时点位（量程 / 阈值 / 尖峰）+ 阈值判定 + 分区溶解氧矩阵滚动
+    sizing.ts           参数化试算：脱氮上界 (R+r)/(1+R+r)、温度与泥龄修正、需氧 / 污泥 / 电耗
+    alarm-log.ts        报警事件：审计条目 + 24h 越限小时 + 工况事件 → 派单 / 确认 / 闭环
   view/            与家族打交道的一层
     adapter.ts          设计器 → 扁平图（引擎结构与业务结构之间唯一的接触点）
     shell.ts            画布化外壳：侧栏 ICEMenu / 顶栏 / 卡片栅格 / 页签切换 / 岛的回调
@@ -142,7 +148,7 @@ src/
     canvas-viewport.ts  岛的铺满容器 + 滚轮锚点缩放 + 拖拽平移
     board.ts            图表装配 + option 构造（ice-chart）
     symbol-legend.ts    符号图例的版面计算（纯函数）与渲染
-    pages/              三个页面：process（工艺图）/ data（运行数据）/ legend（符号库）
+    pages/              六个页面：process / data / live / calc / events / legend
   entries/app.ts   唯一入口（只做装配与状态编排，不写业务规则）
 tests/domain/      jest 单测（镜像 domain 结构）
 e2e/               Playwright 端到端 + 画布断言工具（按坐标点控件、按像素验绘制）

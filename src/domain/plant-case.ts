@@ -93,7 +93,12 @@ export function design(partial: Partial<UnitDesign> = {}): UnitDesign {
  * 走线时它们要被降优先级（主线能通就不走备用线），工况复位时也要回到关位。
  * 所以必须显式列出来，而不是靠"阀门都默认开"。
  */
-export const NORMALLY_CLOSED_VALVES: string[] = ['bypassValve'];
+export const NORMALLY_CLOSED_VALVES: string[] = [
+  /** 初沉池超越阀：雨季水量大时才开 */
+  'bypassValve',
+  /** 事故水回流阀：出水超标时才开，把水切入事故池 */
+  'accidentValve',
+];
 
 /** 生物池（AAO 三段）：算污泥龄、容积负荷、总 HRT 时只认这三种 */
 export const BIOLOGICAL_TANK_KINDS: WaterSymbolKind[] = ['anaerobicTank', 'anoxicTank', 'aerobicTank'];
@@ -175,9 +180,25 @@ export const SEWAGE_PLANT: PlantCase = {
     { id: 'outlet', kind: 'outlet', name: '排放口', tag: 'OUT', left: 1320, top: 400, design: design({ flow: Q }) },
 
     // ---- 第三行：污泥线 ----
+    { id: 'returnPump', kind: 'submersiblePump', name: '回流污泥泵', tag: 'P-SB-101', left: 1060, top: 292, design: design({ flow: Q, power: 45 }) },
     { id: 'thickener', kind: 'sludgeThickener', name: '污泥浓缩池', tag: 'ST-101', left: 440, top: 660, design: design({ volume: 900, area: 300, power: 6, headLoss: 0.5 }) },
     { id: 'dewater', kind: 'dewateringMachine', name: '污泥脱水机', tag: 'DW-101', left: 660, top: 660, design: design({ power: 90, headLoss: 0.5 }) },
-    { id: 'sludgeOut', kind: 'sludgeOut', name: '污泥外运', tag: 'SO-101', left: 860, top: 660, design: design() },
+    { id: 'screwPump', kind: 'screwPump', name: '污泥输送螺杆泵', tag: 'P-SC-101', left: 762, top: 692, design: design({ power: 15 }) },
+    { id: 'sludgeSilo', kind: 'sludgeSilo', name: '污泥料仓', tag: 'SIL-101', left: 880, top: 652, design: design({ volume: 120, power: 4 }) },
+    { id: 'sludgeOut', kind: 'sludgeOut', name: '污泥外运', tag: 'SO-101', left: 1020, top: 672, design: design() },
+    { id: 'deodorizer', kind: 'deodorizer', name: '除臭装置', tag: 'OD-101', left: 430, top: 806, design: design({ volume: 400, power: 30 }) },
+
+    // ---- 串联元件与仪表（自控阀门 / 在线仪表 / 变频器）----
+    { id: 'checkValve', kind: 'checkValve', name: '出水止回阀', tag: 'CV-101', left: 185, top: 128, design: design({ flow: Q, headLoss: 0.1 }) },
+    { id: 'recycleValve', kind: 'motorValve', name: '内回流调节阀', tag: 'MOV-102', left: 1030, top: 36, design: design({ flow: Q * 2 }) },
+    { id: 'accidentValve', kind: 'motorValve', name: '事故水回流阀', tag: 'MOV-101', left: 1150, top: 520, design: design() },
+    { id: 'levelGauge', kind: 'levelGauge', name: '事故池液位计', tag: 'LT-101', left: 1082, top: 476, design: design() },
+    { id: 'pressureGauge', kind: 'pressureGauge', name: '供气干管压力表', tag: 'PT-101', left: 1070, top: -70, design: design() },
+    { id: 'vfd', kind: 'vfd', name: '鼓风机变频器', tag: 'VFD-101', left: 1204, top: -62, design: design() },
+
+    // ---- 事故水支路（出水超标时切入，再回流到生化工段）----
+    { id: 'accidentTank', kind: 'storageTank', name: '事故池', tag: 'EQ-101', left: 970, top: 520, design: design({ volume: 8000, area: 1200 }) },
+    { id: 'accidentPump', kind: 'submersiblePump', name: '事故水回流泵', tag: 'P-SB-102', left: 838, top: 528, design: design({ power: 22 }) },
 
     // ---- 辅助设备与超越管阀门 ----
     { id: 'blower', kind: 'blower', name: '鼓风机', tag: 'B-201', left: 1130, top: -60, design: design({ power: 780 }) },
@@ -186,7 +207,8 @@ export const SEWAGE_PLANT: PlantCase = {
   pipes: [
     // 水线主线（预处理 → 生化 → 二沉池）
     { id: 'pipe-inlet-pump', sourceId: 'inlet', targetId: 'pump', medium: 'sewage', dn: 'DN800' },
-    { id: 'pipe-pump-screen', sourceId: 'pump', targetId: 'screen', medium: 'sewage', dn: 'DN800' },
+    { id: 'pipe-pump-check', sourceId: 'pump', targetId: 'checkValve', medium: 'sewage', dn: 'DN800' },
+    { id: 'pipe-check-screen', sourceId: 'checkValve', targetId: 'screen', medium: 'sewage', dn: 'DN800' },
     { id: 'pipe-screen-grit', sourceId: 'screen', targetId: 'grit', medium: 'sewage', dn: 'DN800' },
     { id: 'pipe-grit-primary', sourceId: 'grit', targetId: 'primary', medium: 'sewage', dn: 'DN700' },
     { id: 'pipe-primary-ana', sourceId: 'primary', targetId: 'ana', medium: 'sewage', dn: 'DN600' },
@@ -201,13 +223,30 @@ export const SEWAGE_PLANT: PlantCase = {
     { id: 'pipe-analyzer-meter', sourceId: 'analyzer', targetId: 'meter', medium: 'effluent', dn: 'DN500' },
     { id: 'pipe-meter-valve', sourceId: 'meter', targetId: 'outletValve', medium: 'effluent', dn: 'DN500' },
     { id: 'pipe-valve-outlet', sourceId: 'outletValve', targetId: 'outlet', medium: 'effluent', dn: 'DN500' },
+
+    // 事故水支路：出水超标时开事故阀 → 事故池 → 回流泵 → 生物池（平时阀门常闭）
+    // 接入点选在消毒池之后、在线监测之前：计量点之后再分叉会让"出水路径"绕开在线监测（图纸校验会拦）
+    { id: 'pipe-disinfect-accident', sourceId: 'disinfect', targetId: 'accidentValve', medium: 'effluent', dn: 'DN400' },
+    { id: 'pipe-accident-tank', sourceId: 'accidentValve', targetId: 'accidentTank', medium: 'effluent', dn: 'DN400' },
+    { id: 'pipe-tank-accidentPump', sourceId: 'accidentTank', targetId: 'accidentPump', medium: 'returnSludge', dn: 'DN400' },
+    { id: 'pipe-accidentPump-ana', sourceId: 'accidentPump', targetId: 'ana', medium: 'returnSludge', dn: 'DN400' },
     // 回流（AAO 的两条命脉）
-    { id: 'pipe-aer-anx', sourceId: 'aer', targetId: 'anx', medium: 'recycle', dn: 'DN300', sourcePort: 'T', targetPort: 'T' },
-    { id: 'pipe-sec-ana', sourceId: 'sec', targetId: 'ana', medium: 'returnSludge', dn: 'DN200', sourcePort: 'B', targetPort: 'B' },
+    { id: 'pipe-aer-recycleValve', sourceId: 'aer', targetId: 'recycleValve', medium: 'recycle', dn: 'DN300', sourcePort: 'T', targetPort: 'B' },
+    { id: 'pipe-recycleValve-anx', sourceId: 'recycleValve', targetId: 'anx', medium: 'recycle', dn: 'DN300', sourcePort: 'T', targetPort: 'T' },
+    { id: 'pipe-sec-returnPump', sourceId: 'sec', targetId: 'returnPump', medium: 'returnSludge', dn: 'DN200', sourcePort: 'B', targetPort: 'T' },
+    { id: 'pipe-returnPump-ana', sourceId: 'returnPump', targetId: 'ana', medium: 'returnSludge', dn: 'DN200', sourcePort: 'L', targetPort: 'B' },
     // 污泥线
     { id: 'pipe-sec-thickener', sourceId: 'sec', targetId: 'thickener', medium: 'sludge', dn: 'DN200', sourcePort: 'B', targetPort: 'T' },
     { id: 'pipe-thickener-dewater', sourceId: 'thickener', targetId: 'dewater', medium: 'sludge', dn: 'DN200' },
-    { id: 'pipe-dewater-out', sourceId: 'dewater', targetId: 'sludgeOut', medium: 'sludge', dn: 'DN150' },
+    { id: 'pipe-dewater-screw', sourceId: 'dewater', targetId: 'screwPump', medium: 'sludge', dn: 'DN150' },
+    { id: 'pipe-screw-silo', sourceId: 'screwPump', targetId: 'sludgeSilo', medium: 'sludge', dn: 'DN150' },
+    { id: 'pipe-silo-out', sourceId: 'sludgeSilo', targetId: 'sludgeOut', medium: 'sludge', dn: 'DN150' },
+    { id: 'pipe-dewater-deodor', sourceId: 'dewater', targetId: 'deodorizer', medium: 'air', dn: 'DN300' },
+
+    // 信号线与动力线（不是管道，没有管径）：仪表 / 变频器要画出来接在哪
+    { id: 'pipe-tank-level', sourceId: 'accidentTank', targetId: 'levelGauge', medium: 'signal', dn: '' },
+    { id: 'pipe-blower-pressure', sourceId: 'blower', targetId: 'pressureGauge', medium: 'signal', dn: '' },
+    { id: 'pipe-vfd-blower', sourceId: 'vfd', targetId: 'blower', medium: 'power', dn: '' },
     // 辅助管线
     { id: 'pipe-blower-aer', sourceId: 'blower', targetId: 'aer', medium: 'air', dn: 'DN100', sourcePort: 'B', targetPort: 'T' },
     { id: 'pipe-dosing-coag', sourceId: 'dosing', targetId: 'coag', medium: 'chemical', dn: 'DN25' },

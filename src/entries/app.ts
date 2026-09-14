@@ -55,10 +55,41 @@ import { mountIsland, placeIslands, type IslandHandle } from '../view/islands';
 import { installViewport } from '../view/canvas-viewport';
 import { clearLoginUser, mountLogin, readLoginUser, saveLoginUser } from '../view/login';
 import { dailyTrendOption, mountChart } from '../view/board';
+import {
+  AERATION_ZONES,
+  DEFAULT_SCENARIO,
+  LIVE_SIGNALS,
+  buildAlarmEvents,
+  createSignalRandom,
+  createZoneMatrix,
+  denitrificationCeiling,
+  evaluateScenario,
+  initialSignalValues,
+  rollZoneMatrix,
+  sampleSignals,
+  summarizeReadings,
+  summarizeAlarms,
+  zoneMatrixData,
+  ackAlarm,
+  closeAlarm,
+  type AlarmEvent,
+  type ScenarioParams,
+  type ScenarioResult,
+  type SignalReading,
+} from '../domain';
 import { SymbolLegend, cellAt } from '../view/symbol-legend';
 import { buildProcessPage, processIslandRect } from '../view/pages/process-page';
 import { boardIslandRect, buildDataPage } from '../view/pages/data-page';
 import { buildLegendPage, legendIslandRect, type LegendPageHandle } from '../view/pages/legend-page';
+import {
+  buildLivePage,
+  gaugeIslandRect,
+  heatIslandRect,
+  liveTrendIslandRect,
+  type LivePageHandle,
+} from '../view/pages/live-page';
+import { buildCalcPage, curveIslandRect, type CalcPageHandle } from '../view/pages/calc-page';
+import { buildEventsPage, type EventsPageHandle } from '../view/pages/events-page';
 import { graphOfDesigner } from '../view/adapter';
 
 function need<T extends HTMLElement>(id: string): T {
@@ -76,11 +107,19 @@ const islands: Record<string, IslandHandle> = {
   process: mountIsland('process', need<HTMLCanvasElement>('canvas-process')),
   board: mountIsland('board', need<HTMLCanvasElement>('canvas-board')),
   legend: mountIsland('legend', need<HTMLCanvasElement>('canvas-legend')),
+  'live-trend': mountIsland('live-trend', need<HTMLCanvasElement>('canvas-live-trend')),
+  'live-gauge': mountIsland('live-gauge', need<HTMLCanvasElement>('canvas-live-gauge')),
+  'live-heat': mountIsland('live-heat', need<HTMLCanvasElement>('canvas-live-heat')),
+  'calc-curve': mountIsland('calc-curve', need<HTMLCanvasElement>('canvas-calc-curve')),
 };
-// 先把三个岛摆到位再建引擎：引擎初始化要读画布尺寸，摆之前是 0×0
+// 先把所有岛摆到位再建引擎：引擎初始化要读画布尺寸，摆之前是 0×0
 islands.process.place(processIslandRect(layout));
 islands.board.place(boardIslandRect(layout));
 islands.legend.place(legendIslandRect(layout));
+islands['live-trend'].place(liveTrendIslandRect(layout));
+islands['live-gauge'].place(gaugeIslandRect(layout));
+islands['live-heat'].place(heatIslandRect(layout));
+islands['calc-curve'].place(curveIslandRect(layout));
 
 /* ================= 岛 1：工艺图（设计器） ================= */
 
@@ -115,6 +154,72 @@ const board = mountChart(islands.board.canvas, () =>
   dailyTrendOption(dayPoints, { modeLabel: modeById(modeId).label, standard: meta.standard })
 );
 
+/* ================= 岛 4~7：实时监视的三张图 + 试算曲线 ================= */
+
+const LIVE_WINDOW = 120; // 趋势滑动窗口点数
+const HEAT_COLUMNS = 24; // 热力图时间片数
+
+/** 实时趋势：三条曲线（流量 / 溶解氧 / 出水氨氮），双 y 轴 */
+const liveTrend = mountChart(islands['live-trend'].canvas, () => ({
+  title: { text: '实时趋势', subtext: '滑动窗口 · 新点从右侧进入' },
+  theme: 'light',
+  legend: { show: true, position: 'top' },
+  tooltip: { trigger: 'axis' },
+  crosshair: { show: true, axis: 'x', showAxisLabel: true },
+  xAxis: { type: 'value', name: '采样点' },
+  yAxis: [
+    { name: '流量 m³/h', min: 2000, max: 6500 },
+    { name: '浓度 mg/L', position: 'right', min: 0, max: 8 },
+  ],
+  animation: { enter: { duration: 300, easing: 'easeOutCubic' } },
+  series: [
+    { id: 'inflow', type: 'area', name: '进水流量', data: [], color: '#0d6efd', areaOpacity: 0.16, lineWidth: 1.6, smooth: 0.25 },
+    { id: 'do', type: 'line', name: '溶解氧', yAxisIndex: 1, data: [], color: '#198754', lineWidth: 2, smooth: 0.25 },
+    { id: 'nh3n', type: 'line', name: '出水氨氮', yAxisIndex: 1, data: [], color: '#dc3545', lineWidth: 2, smooth: 0.25 },
+  ],
+}) as any);
+
+/** 关键仪表：指针弹簧跟随 */
+const liveGauge = mountChart(islands['live-gauge'].canvas, () => ({
+  title: { text: '好氧池溶解氧', subtext: '目标 2.0 mg/L' },
+  theme: 'light',
+  tooltip: { trigger: 'item' },
+  gauge: {
+    min: 0,
+    max: 5,
+    splitNumber: 5,
+    lineWidth: 14,
+    axisLineColor: [
+      [0.2, '#dc3545'],
+      [0.3, '#ffc107'],
+      [0.75, '#198754'],
+      [1, '#0d6efd'],
+    ],
+    pointer: { show: true, width: 6, length: 0.72 },
+    detail: { formatter: (value: number) => `${value.toFixed(2)}`, fontSize: 26 },
+    title: { show: false },
+  },
+  series: [{ id: 'g', type: 'gauge', name: '溶解氧', data: [{ name: '溶解氧', value: 2.0 }] }],
+}) as any);
+
+/** 分区溶解氧热力图：每两拍左移一列 */
+let heatMatrix = createZoneMatrix(HEAT_COLUMNS, AERATION_ZONES.length, 20260914);
+const liveHeat = mountChart(islands['live-heat'].canvas, () => ({
+  title: { text: '生化池分区溶解氧', subtext: `最近 ${HEAT_COLUMNS} 个时间片` },
+  theme: 'light',
+  legend: { show: false },
+  tooltip: { trigger: 'item' },
+  xAxis: { type: 'category', data: Array.from({ length: HEAT_COLUMNS }, (_, index) => `T${index + 1}`) },
+  yAxis: { type: 'category', data: AERATION_ZONES },
+  grid: { x: false, y: false },
+  animation: { enter: { duration: 300 }, update: { duration: 180, easing: 'linear' } },
+  series: [{ id: 'heat', type: 'heatmap', name: '溶解氧', data: zoneMatrixData(heatMatrix, AERATION_ZONES) }],
+}) as any);
+
+/** 试算曲线：理论上界 + 修正后能力（都是 function 系列）+ 当前工作点 */
+let curveOptionOf = () => ({ series: [] as any[] });
+const calcCurve = mountChart(islands['calc-curve'].canvas, () => curveOptionOf() as any);
+
 function snapshot() {
   return {
     kpi,
@@ -126,6 +231,157 @@ function snapshot() {
     modeLabel: modeById(modeId).label,
     idleCount: graphOfDesigner(designer).nodes.filter((node) => node.idle).length,
   };
+}
+
+/* ================= 实时监视：采样循环 ================= */
+
+let signalRandom = createSignalRandom(20260914);
+let signalValues = initialSignalValues(LIVE_SIGNALS);
+let liveReadings: SignalReading[] = [];
+let liveRunning = true;
+let liveSpeed = 1;
+let liveSamples = 0;
+let liveTimer: any = null;
+let livePage: LivePageHandle | null = null;
+
+/** 跑一拍：采样 → 推曲线 → 更新仪表与热力图 → 刷新读数卡 */
+function liveTick(): void {
+  const sampled = sampleSignals(LIVE_SIGNALS, signalValues, signalRandom);
+  signalValues = sampled.values;
+  liveReadings = sampled.readings;
+  liveSamples += 1;
+
+  const byId = (id: string) => sampled.readings.filter((reading) => reading.id === id)[0];
+  const inflow = byId('inflow');
+  const oxygen = byId('do');
+  const ammonia = byId('nh3n');
+  if (inflow && oxygen && ammonia) {
+    liveTrend.chart.appendData('inflow', [[liveSamples, Number(inflow.value.toFixed(1))]], { maxPoints: LIVE_WINDOW });
+    liveTrend.chart.appendData('do', [[liveSamples, Number(oxygen.value.toFixed(2))]], { maxPoints: LIVE_WINDOW });
+    liveTrend.chart.appendData('nh3n', [[liveSamples, Number(ammonia.value.toFixed(2))]], { maxPoints: LIVE_WINDOW });
+    liveGauge.chart.setData('g', [{ name: '溶解氧', value: Number(oxygen.value.toFixed(2)) }]);
+  }
+  // 热力图每两拍左移一列（与图表的 180ms 更新动画配合，不闪）
+  if (liveSamples % 2 === 0) {
+    heatMatrix = rollZoneMatrix(heatMatrix, signalRandom, AERATION_ZONES.length);
+    liveHeat.chart.setData('heat', zoneMatrixData(heatMatrix, AERATION_ZONES));
+  }
+  const summary = summarizeReadings(liveReadings);
+  if (livePage) livePage.update(liveReadings, summary);
+  shell.ice.dirty = true;
+}
+
+function liveStart(): void {
+  if (liveTimer) return;
+  liveRunning = true;
+  liveTimer = setInterval(liveTick, Math.max(120, 500 / liveSpeed));
+  if (livePage) livePage.setRunning(true);
+}
+
+function livePause(): void {
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = null;
+  liveRunning = false;
+  if (livePage) livePage.setRunning(false);
+  shell.refresh();
+}
+
+function liveToggle(): void {
+  if (liveRunning) livePause();
+  else liveStart();
+  shell.refresh();
+}
+
+function liveSetSpeed(speed: number): void {
+  liveSpeed = speed;
+  if (liveTimer) {
+    clearInterval(liveTimer);
+    liveTimer = null;
+    liveStart();
+  }
+}
+
+/* ================= 工艺试算：参数与结果 ================= */
+
+let scenarioParams: ScenarioParams = { ...DEFAULT_SCENARIO };
+let scenarioResult: ScenarioResult = evaluateScenario(scenarioParams);
+let calcPage: CalcPageHandle | null = null;
+
+/** 试算曲线：两条函数曲线（理论上界 / 修正后能力）+ 当前工作点 */
+function curveOption(): any {
+  const { returnRatio, internalRatio } = scenarioParams;
+  const k = scenarioResult.temperatureFactor * scenarioResult.srtFactor;
+  return {
+    title: { text: '脱氮能力 vs 污泥回流比 R', subtext: `内回流比 r = ${internalRatio} · 修正系数 k = ${k.toFixed(2)}` },
+    theme: 'light',
+    legend: { show: true, position: 'top' },
+    tooltip: { trigger: 'axis' },
+    crosshair: { show: true, axis: 'x', showAxisLabel: true },
+    xAxis: { type: 'value', name: 'R', min: 0.3, max: 2.5 },
+    yAxis: { name: '脱氮率 %', min: 0, max: 100 },
+    animation: { enter: { duration: 400 }, update: { duration: 260, easing: 'easeOutCubic' } },
+    series: [
+      {
+        id: 'ceiling',
+        type: 'function',
+        name: '理论上界 (R+r)/(1+R+r)',
+        expression: '(x + r) / (1 + x + r) * 100',
+        domain: [0.3, 2.5],
+        params: { r: internalRatio },
+        color: '#0d6efd',
+        lineWidth: 2.4,
+      },
+      {
+        id: 'capability',
+        type: 'function',
+        name: '修正后能力（温度 / 泥龄）',
+        expression: '(x + r) / (1 + x + r) * 100 * k',
+        domain: [0.3, 2.5],
+        params: { r: internalRatio, k },
+        color: '#fd7e14',
+        lineWidth: 2,
+        lineDash: [6, 4],
+      },
+      {
+        id: 'demo',
+        type: 'function',
+        name: '参数扫动演示（r 在 1~3 之间来回）',
+        expression: '(x + rr) / (1 + x + rr) * 100',
+        domain: [0.3, 2.5],
+        params: { rr: 2 },
+        sweep: { name: 'rr', from: 1, to: 3, duration: 4200, mode: 'pingpong' },
+        color: '#94a3b8',
+        lineWidth: 1.4,
+      },
+      {
+        id: 'point',
+        type: 'scatter',
+        name: '当前工作点',
+        data: [[returnRatio, Number((scenarioResult.removalRate * 100).toFixed(1))]],
+        color: '#dc3545',
+        symbolSize: 9,
+      },
+    ],
+  };
+}
+
+function applyScenario(next: ScenarioParams): void {
+  scenarioParams = next;
+  scenarioResult = evaluateScenario(next);
+  if (calcPage) calcPage.apply(scenarioResult);
+  calcCurve.chart.setOption(curveOption(), { animate: true, preserveView: true });
+  shell.refresh();
+}
+
+/* ================= 事件中心：报警状态 ================= */
+
+let alarms: AlarmEvent[] = [];
+let eventsPage: EventsPageHandle | null = null;
+let operatorName = '值班员';
+
+function refreshAlarms(): void {
+  alarms = buildAlarmEvents({ issues, points: dayPoints, mode: modeById(modeId), meta });
+  if (eventsPage) eventsPage.reload();
 }
 
 /* ================= 案例装载与工况 ================= */
@@ -192,6 +448,7 @@ function recompute(): void {
   trace = traceProcessFlow(graph, { deprioritizedNodes: NORMALLY_CLOSED_VALVES });
 
   if (islands.board.visible()) board.refresh();
+  refreshAlarms();
   shell.refresh();
   graphIce.dirty = true;
 }
@@ -360,6 +617,9 @@ const shell = mountShell({
   menu: [
     { key: 'process', label: '工艺流程图', iconPath: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z' },
     { key: 'data', label: '运行数据', iconPath: 'M3 3v18h18M7 15l4-5 3 3 5-7' },
+    { key: 'live', label: '实时监视', iconPath: 'M22 12h-4l-3 9L9 3l-3 9H2' },
+    { key: 'calc', label: '工艺试算', iconPath: 'M9 3H5a2 2 0 0 0-2 2v4m0 6v4a2 2 0 0 0 2 2h4m6 0h4a2 2 0 0 0 2-2v-4m0-6V5a2 2 0 0 0-2-2h-4M7 12h10' },
+    { key: 'events', label: '事件中心', iconPath: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0' },
     {
       key: 'legend',
       label: '符号库',
@@ -419,6 +679,7 @@ const shell = mountShell({
     shell.show(key);
     recompute();
     if (key === 'legend') legendViewport.fitViewport();
+    if (key === 'calc') applyScenario({ ...scenarioParams });
   },
   pages: [
     {
@@ -430,6 +691,49 @@ const shell = mountShell({
       key: 'data',
       label: '运行数据',
       build: (ctx: PageContext) => buildDataPage(ctx, { snapshot }),
+    },
+    {
+      key: 'live',
+      label: '实时监视',
+      build: (ctx: PageContext) => {
+        livePage = buildLivePage(ctx, {
+          onToggleRunning: liveToggle,
+          onSpeedChange: liveSetSpeed,
+          isRunning: () => liveRunning,
+        });
+        return livePage;
+      },
+    },
+    {
+      key: 'calc',
+      label: '工艺试算',
+      build: (ctx: PageContext) => {
+        calcPage = buildCalcPage(ctx, {
+          initial: scenarioParams,
+          onChange: applyScenario,
+          onReset: () => applyScenario({ ...DEFAULT_SCENARIO }),
+          result: () => scenarioResult,
+        });
+        calcPage.apply(scenarioResult);
+        return calcPage;
+      },
+    },
+    {
+      key: 'events',
+      label: '事件中心',
+      build: (ctx: PageContext) => {
+        eventsPage = buildEventsPage(ctx, {
+          events: () => alarms,
+          onAck: (id) => {
+            alarms = ackAlarm(alarms, id, operatorName);
+          },
+          onClose: (id) => {
+            alarms = closeAlarm(alarms, id, operatorName);
+          },
+          operator: () => operatorName,
+        });
+        return eventsPage;
+      },
     },
     {
       key: 'legend',
@@ -458,6 +762,24 @@ const shell = mountShell({
       requestAnimationFrame(() => {
         legendViewport.sizeCanvas();
         legendViewport.fitViewport();
+      });
+    }
+    // 实时三图与试算曲线：懒显示，第一次露出来补一次尺寸对齐 + 首帧数据
+    if (specs.some((spec) => spec.id === 'live-trend')) {
+      requestAnimationFrame(() => {
+        liveTrend.resize();
+        liveTrend.refresh();
+        liveGauge.resize();
+        liveGauge.refresh();
+        liveHeat.resize();
+        liveHeat.refresh();
+        if (!liveSamples) liveTick();
+      });
+    }
+    if (specs.some((spec) => spec.id === 'calc-curve')) {
+      requestAnimationFrame(() => {
+        calcCurve.resize();
+        calcCurve.refresh();
       });
     }
   },
@@ -491,6 +813,7 @@ const login = mountLogin({
 /** 进入应用：记住登录态、把用户带到侧栏署名上、揭开登录层 */
 function enterApp(name: string): void {
   saveLoginUser({ name });
+  liveStart();
   shell.setUser({ name, role: '示范厂 WWTP-100K · 已登录' });
   login.hide();
   // 岛在登录层下面，被盖着的时候已经建好了；这里只需按当前页把两个引擎对齐一次
@@ -503,7 +826,11 @@ function enterApp(name: string): void {
       board.resize();
       board.refresh();
     }
+    calcCurve.resize();
+    calcCurve.refresh();
   });
+  refreshAlarms();
+  operatorName = name;
   recompute();
   shell.toast(`欢迎，${name}`);
 }
@@ -519,6 +846,7 @@ function logout(): void {
 
 buildCase();
 renderLegend();
+curveOptionOf = curveOption;
 shell.show('process');
 requestAnimationFrame(() => {
   viewport.sizeCanvas();
@@ -526,8 +854,9 @@ requestAnimationFrame(() => {
   recompute();
 });
 
-// 有登录态（同一标签页刷新）就直接进；否则停在登录页
+// 实时采样：进应用后才开始（登录门后面不必空跑）
 const remembered = readLoginUser();
+if (remembered) liveStart();
 if (remembered) enterApp(remembered.name);
 else login.show();
 
@@ -570,5 +899,37 @@ else login.show();
   },
   get modeId() {
     return modeId;
+  },
+  // 实时监视
+  live: {
+    isRunning: () => liveRunning,
+    samples: () => liveSamples,
+    readings: () => liveReadings,
+    tick: () => liveTick(),
+    toggle: () => liveToggle(),
+    setSpeed: (speed: number) => liveSetSpeed(speed),
+    trendPoints: () => liveTrend.chart.norm.series.map((series: any) => (series.points || []).length),
+    heatData: () => (liveHeat.chart.norm.series[0]?.points || []).length,
+  },
+  // 工艺试算
+  calc: {
+    params: () => scenarioParams,
+    apply: (next: Partial<ScenarioParams>) => applyScenario({ ...scenarioParams, ...next }),
+    result: () => scenarioResult,
+    curveSeries: () => calcCurve.chart.norm.series.map((series: any) => series.id),
+  },
+  // 事件中心
+  alarms: {
+    list: () => alarms,
+    summary: () => summarizeAlarms(alarms),
+    filter: () => (eventsPage ? eventsPage.filter() : { status: 'all', keyword: '' }),
+    ack: (id: string) => {
+      alarms = ackAlarm(alarms, id, operatorName);
+      if (eventsPage) eventsPage.reload();
+    },
+    close: (id: string) => {
+      alarms = closeAlarm(alarms, id, operatorName);
+      if (eventsPage) eventsPage.reload();
+    },
   },
 };

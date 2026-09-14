@@ -153,12 +153,22 @@ test('整个系统只有一个 HTML：登录门之后是同一个壳，符号库
     canvases: Array.from(document.querySelectorAll('canvas')).map((c) => c.id),
   }));
   expect(entered.loginVisible).toBe(false);
-  expect(entered.total).toBe(21);
+  expect(entered.total).toBe(31);
   expect(entered.page).toBe('process');
   expect(entered.under).toBe('canvas-process');
-  // 一张外壳画布 + 一张登录层 + 三个岛画布，全部在同一个 HTML 里
+  // 一张外壳画布 + 一张登录层 + 七个岛画布，全部在同一个 HTML 里
   expect(entered.canvases.sort()).toEqual(
-    ['canvas-board', 'canvas-legend', 'canvas-login', 'canvas-process', 'canvas-shell'].sort()
+    [
+      'canvas-shell',
+      'canvas-login',
+      'canvas-process',
+      'canvas-board',
+      'canvas-legend',
+      'canvas-live-trend',
+      'canvas-live-gauge',
+      'canvas-live-heat',
+      'canvas-calc-curve',
+    ].sort()
   );
 
   // 切到符号库页签，图例岛接管那块区域
@@ -171,6 +181,6 @@ test('整个系统只有一个 HTML：登录门之后是同一个壳，符号库
   }));
   expect(legend.page).toBe('legend');
   expect(legend.under).toBe('canvas-legend');
-  expect(legend.cells).toBe(21);
+  expect(legend.cells).toBe(31);
   expect((page as any).__errors).toEqual([]);
 });

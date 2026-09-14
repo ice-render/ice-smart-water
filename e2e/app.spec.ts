@@ -32,7 +32,7 @@ test.beforeEach(async ({ page }) => {
   await login(page, { name: '演示员 张三' });
 });
 
-test('装载：外壳铺满画布，工艺图 22 个单位 / 24 段管线，图纸校验与运行审计都干净', async ({ page }) => {
+test('装载：外壳铺满画布，工艺图 34 个单位 / 37 段管线（含信号与动力线），图纸校验与运行审计都干净', async ({ page }) => {
   const state = await page.evaluate(() => {
     const water = (window as any).__water;
     return {
@@ -48,12 +48,12 @@ test('装载：外壳铺满画布，工艺图 22 个单位 / 24 段管线，图�
     };
   });
   expect(state.shellCanvas[0]).toBeGreaterThan(1400);
-  expect(state.nodes).toBe(22);
-  expect(state.edges).toBe(24);
+  expect(state.nodes).toBe(34); // 22 个原单元 + 12 个新增（自控阀门 / 在线仪表 / 事故支路 / 除臭 / 料仓…）
+  expect(state.edges).toBe(37); // 34 条工艺管线 + 3 条信号/动力线
   expect(state.validate).toEqual([]);
   expect(state.issues).toEqual([]);
   expect(state.traceConnected).toBe(true);
-  expect(state.tracePath).toBe(16);
+  expect(state.tracePath).toBe(17); // 主流程 + 出水止回阀
   expect(state.currentPage).toBe('process');
   expect((page as any).__errors).toEqual([]);
 });

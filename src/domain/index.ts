@@ -13,3 +13,6 @@ export * from './operating-modes';
 export * from './plant-audit';
 export * from './symbol-catalog';
 export * from './daily-profile';
+export * from './live-signal';
+export * from './sizing';
+export * from './alarm-log';

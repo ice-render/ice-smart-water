@@ -50,7 +50,7 @@ describe('沿程水质推演', () => {
   it('从进水逐单元折减，出水在一级 A 以内', () => {
     const chain = evaluateQualityChain(graph, meta, TYPICAL_INFLUENT);
     expect(chain.connected).toBe(true);
-    expect(chain.stages.length).toBe(16);
+    expect(chain.stages.length).toBe(17); // 主流程 16 个单元 + 新增的出水止回阀
     expect(chain.stages[0].id).toBe('inlet');
     // 初沉池去除 30% BOD₅ / COD、55% SS
     const afterPrimary = chain.stages.filter((stage) => stage.id === 'primary')[0];
