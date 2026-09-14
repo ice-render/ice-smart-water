@@ -637,9 +637,12 @@ export function sectionHeading(ctx: PageContext, left: number, top: number, text
   });
 }
 
-/** 一条要点：`• 文字`，自动换行 */
-export function bullet(ctx: PageContext, rect: { left: number; top: number; width: number; text: string }): any {
-  return paragraph(ctx, { ...rect, text: `• ${rect.text}` });
+/** 一条要点：`• 文字`，自动换行（可传 fontSize 收紧行高，卡片窄时多塞几条） */
+export function bullet(
+  ctx: PageContext,
+  rect: { left: number; top: number; width: number; text: string; fontSize?: number }
+): any {
+  return paragraph(ctx, { ...rect, fontSize: rect.fontSize, text: `• ${rect.text}` });
 }
 
 /**

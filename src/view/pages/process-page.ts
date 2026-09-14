@@ -226,24 +226,38 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
   }
 
   /**
-   * 审计摘要卡：**一律走 `stackColumn` 流式排**。
+   * 审计摘要卡：**一律走 `stackColumn` 流式排**，且按卡片可用高度**贪心截取**审计条目。
    *
-   * 原来手算 y 递增踩了两个坑：① 正文从 `CARD_INSET`(16) 起排，压到卡片标题上（标题带占了 0~44）；
-   * ② 段落高度按字数估，估少一行就压下一段。交给 stackColumn 按实测高度排就没这类问题。
+   * 历史坑：① 手算 y 压标题带；② 段落高度估少一行压下一段 → 已交给 stackColumn 按实测高度排。
+   * ③ 上一轮又固定 `slice(0,4)`：雨季 7 条审计每条 2 行，4 条就顶出卡片底把文字甩到卡片外
+   * （用户看到的"交叠"）。这里改成：算清卡片正文净高，固定头部（工况标题 + 运行要点 + "运行审计"）
+   * 之后，把审计条目一条条往里塞，塞不下的用"还有 N 条（详见「事件中心」）"收口 —— 任何工况都不会溢出。
    */
   function renderNotes(snapshot: ProcessSnapshot): void {
     notesBody.removeChildren([...notesBody.childNodes]);
     const width = notesRect.width - CARD_INSET * 2;
+    const TOP = 52; // 正文起点（标题带下方）
+    const FOOTER_H = 16;
+    const footerTop = notesRect.height - CARD_INSET - FOOTER_H;
+    const bodyHeight = footerTop - TOP - 12; // 留给正文（不含页脚）的净高，含一点安全余量
 
     const modeTitle = new ICELabel({
       width,
       text: `当前工况：${snapshot.mode.label}`,
       style: { fontSize: 12, fontWeight: '600', fillStyle: theme.colors.text },
     });
-    const noteNodes = snapshot.mode.notes.map((note) => bullet(ctx, { width, text: note } as any));
+    const noteNodes = snapshot.mode.notes.map((note) => bullet(ctx, { width, text: note, fontSize: 11 } as any));
     const auditHeading = sectionHeading(ctx, 0, 0, '运行审计');
+
+    // 头部固定占用（工况标题 + 运行要点 + "运行审计"小标题）
+    const headItems = [modeTitle, ...noteNodes, auditHeading];
+    let headUsed = 0;
+    headItems.forEach((n, i) => {
+      headUsed += (Number(n.state.height) || 0) + 5 + (i === 0 ? 4 : 0);
+    });
+
     const auditNodes = snapshot.issues.length
-      ? snapshot.issues.slice(0, 4).map((issue) =>
+      ? snapshot.issues.map((issue) =>
           paragraph(ctx, {
             width,
             text: `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`,
@@ -253,13 +267,24 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
         )
       : [paragraph(ctx, { width, text: '✅ 全厂指标在设计与标准区间内', color: theme.colors.success } as any)];
 
-    const stack = [modeTitle].concat(noteNodes).concat([auditHeading]).concat(auditNodes);
-    if (snapshot.issues.length > 4) {
-      stack.push(paragraph(ctx, { width, text: `…还有 ${snapshot.issues.length - 4} 条（详见「事件中心」）`, fontSize: 11 } as any));
+    // 按可用高度贪心截取；至少留一条审计，塞不进的用"还有 N 条"收口
+    const remaining = bodyHeight - headUsed;
+    const shown: any[] = [];
+    let consumed = 0;
+    for (const node of auditNodes) {
+      const h = (Number(node.state.height) || 0) + 5;
+      if (shown.length > 0 && consumed + h > remaining) break;
+      if (shown.length === 0 && h > remaining) break;
+      shown.push(node);
+      consumed += h;
     }
+    const hidden = auditNodes.length - shown.length;
+    const tail = hidden > 0 ? paragraph(ctx, { width, text: `…还有 ${hidden} 条（详见「事件中心」）`, fontSize: 11 } as any) : null;
+
+    const stack = tail ? [...headItems, ...shown, tail] : [...headItems, ...shown];
     stack.forEach((node) => notesBody.addChild(node, false));
     // 正文从标题带下方开始（卡片标题占 0~44）
-    stackColumn(stack, { left: CARD_INSET, top: 52, width, gap: 6, gapAfter: (index) => (index === 0 ? 4 : 0) });
+    stackColumn(stack, { left: CARD_INSET, top: TOP, width, gap: 5, gapAfter: (index) => (index === 0 ? 4 : 0) });
 
     const footer = new ICELabel({
       width,
@@ -267,7 +292,7 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
       style: { fontSize: 11, fillStyle: theme.colors.textTertiary },
     });
     notesBody.addChild(footer, false);
-    footer.setState({ left: CARD_INSET, top: notesRect.height - CARD_INSET - 16 });
+    footer.setState({ left: CARD_INSET, top: footerTop });
   }
 
   function renderConsole(snapshot: ProcessSnapshot): void {

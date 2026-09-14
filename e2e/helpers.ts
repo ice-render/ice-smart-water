@@ -373,3 +373,53 @@ export async function pageOverflow(page: Page): Promise<{ x: number; y: number }
     y: document.documentElement.scrollHeight - document.documentElement.clientHeight,
   }));
 }
+
+/**
+ * 运行要点/审计摘要卡回归：其正文子节点必须落在卡片正文区内（挖掉标题带 44 与内边距 16）。
+ *
+ * 这是上一轮"交叠"残留的精准回归点 —— 雨季 7 条审计曾把文字甩到卡片底外。
+ * `layoutAudit` 抓不到它（溢出的兄弟节点彼此不相交、且仍在内容区内），所以单独守这一处。
+ */
+export async function auditNotesCard(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const w = (window as any).__water;
+    const shell = w.shell;
+    const world = (node: any) => {
+      let l = 0;
+      let t = 0;
+      let c = node;
+      while (c && c.state) {
+        l += Number(c.state.left) || 0;
+        t += Number(c.state.top) || 0;
+        c = c.parentNode;
+      }
+      return { l, t, w: Number(node.state.width) || 0, h: Number(node.state.height) || 0 };
+    };
+    const card = shell.find('notes-card');
+    if (!card) return ['找不到 notes-card'];
+    const cardBox = world(card);
+    // 卡片正文区：挖掉标题带(44)与内边距(16)
+    const body = { l: cardBox.l + 16, t: cardBox.t + 44, w: cardBox.w - 32, h: cardBox.h - 44 - 16 };
+    const tol = 2;
+    const problems: string[] = [];
+    const notesBody = (card.childNodes || []).find(
+      (n: any) => n && n.state && n.constructor && n.constructor.name === 'ICEWidget'
+    );
+    const kids = notesBody ? notesBody.childNodes || [] : [];
+    for (const kid of kids) {
+      if (!kid || !kid.state) continue;
+      const b = world(kid);
+      if (
+        b.l < body.l - tol ||
+        b.t < body.t - tol ||
+        b.l + b.w > body.l + body.w + tol ||
+        b.t + b.h > body.t + body.h + tol
+      ) {
+        problems.push(
+          `notes 子节点[${Math.round(b.l)},${Math.round(b.t)} ${Math.round(b.w)}x${Math.round(b.h)}] 溢出卡片正文区[${Math.round(body.l)},${Math.round(body.t)} ${Math.round(body.w)}x${Math.round(body.h)}]`
+        );
+      }
+    }
+    return problems;
+  });
+}
