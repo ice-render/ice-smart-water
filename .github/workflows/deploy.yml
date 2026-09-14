@@ -1,9 +1,12 @@
 name: Deploy to GitHub Pages
 
-# 推到 master 即构建并部署到 GitHub Pages；PR 只做构建校验（不部署）；也可手动触发。
+# 推到 dev 即构建并部署到 GitHub Pages；PR 只做构建校验（不部署）；也可手动触发。
+#
+# 为什么是 dev 而不是 master：`github-pages` 环境默认只允许**默认分支**部署，
+# 本仓库的默认分支是 dev（master 与 dev 始终同点，内容无差异）。
 on:
   push:
-    branches: [master]
+    branches: [dev]
   pull_request:
   workflow_dispatch:
 
@@ -81,8 +84,8 @@ jobs:
 
   deploy:
     needs: build
-    # 只在 master 上部署（PR 只构建校验）
-    if: github.ref == 'refs/heads/master'
+    # 只在 dev（默认分支，github-pages 环境允许的分支）上部署；PR 只构建校验
+    if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
