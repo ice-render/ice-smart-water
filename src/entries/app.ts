@@ -655,11 +655,32 @@ const shell = mountShell({
     { key: 'logout', label: '退出登录', iconPath: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9' },
   ],
   selectedKey: 'process',
+  /**
+   * 父项只展开、不触发 onMenuSelect（上游设计）：这里补上"跳转 + 提示"。
+   *
+   * 不补的话，点「运行工况」「符号分类」在界面上**没有任何变化** —— 用户会以为菜单坏了。
+   * 现在点父项就跳到该组最相关的那一页，并提示"展开后选一个"。
+   */
+  onMenuExpand: (key: string, expanded: boolean) => {
+    if (!expanded) return;
+    if (key === 'mode') {
+      shell.show('process');
+      recompute();
+      shell.toast('运行工况已展开：选「正常运行 / 雨季超越 / 检修停运」，图上阀位与运行要点会跟着变');
+      return;
+    }
+    if (key === 'cats') {
+      shell.show('legend');
+      shell.toast('符号分类已展开：选一个分类看对应图例');
+    }
+  },
   onMenuSelect: (key: string) => {
     if (key.indexOf('mode:') === 0) {
       const next = key.replace('mode:', '') as OperatingModeId;
       setMode(next);
-      shell.toast(`已切到「${modeById(next).label}」`);
+      // 切工况的"结果"在工艺流程图页最直观（阀位、指标、审计），顺手跳过去，别让用户以为没反应
+      shell.show('process');
+      shell.toast(`已切到「${modeById(next).label}」：图上阀位、5 张指标卡与运行要点已更新`);
       return;
     }
     if (key.indexOf('filter:') === 0) {
@@ -715,6 +736,7 @@ const shell = mountShell({
           result: () => scenarioResult,
         });
         calcPage.apply(scenarioResult);
+        calcPage.syncControls(scenarioParams);
         return calcPage;
       },
     },

@@ -86,7 +86,8 @@ export function buildLegendPage(
 
   /* ---------------- 分类统计 ---------------- */
   const stats = categoryStats();
-  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 3) / 4);
+  // 5 张卡（符号总数 + 4 个分类）：列宽必须按 5 列算 —— 按 4 列算会让第 5 张冲出画布右边
+  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 4) / 5);
   const statCards = [
     { icon: '⊞', title: '符号总数', value: String(stats.reduce((total, item) => total + item.count, 0)), trend: `${SYMBOL_CATEGORIES.length} 个分类` },
     ...stats.map((item) => ({ icon: '◫', title: item.label, value: String(item.count), trend: item.description })),

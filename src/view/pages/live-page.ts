@@ -136,7 +136,8 @@ export function buildLivePage(
   const trendCard = createCard({
     id: 'live-trend-card',
     rect: trendRect,
-    title: '实时趋势 · 滑动窗口（新点从右侧进入，旧点从左滑走）',
+    // 标题要短：卡片右上角放了暂停/速度控件（宽 470），标题超过约 350px 就会压上去
+    title: '实时趋势（滑动窗口）',
     extra: () => {
       const bar = new ICEWidget({
         left: 0,

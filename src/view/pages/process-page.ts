@@ -29,6 +29,7 @@ import {
   createCard,
   paragraph,
   sectionHeading,
+  stackColumn,
   type PageContext,
   type PageHandle,
   type Rect,
@@ -224,68 +225,49 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
     });
   }
 
+  /**
+   * 审计摘要卡：**一律走 `stackColumn` 流式排**。
+   *
+   * 原来手算 y 递增踩了两个坑：① 正文从 `CARD_INSET`(16) 起排，压到卡片标题上（标题带占了 0~44）；
+   * ② 段落高度按字数估，估少一行就压下一段。交给 stackColumn 按实测高度排就没这类问题。
+   */
   function renderNotes(snapshot: ProcessSnapshot): void {
     notesBody.removeChildren([...notesBody.childNodes]);
-    let y = CARD_INSET;
     const width = notesRect.width - CARD_INSET * 2;
 
     const modeTitle = new ICELabel({
-      left: CARD_INSET,
-      top: y,
       width,
       text: `当前工况：${snapshot.mode.label}`,
       style: { fontSize: 12, fontWeight: '600', fillStyle: theme.colors.text },
     });
-    notesBody.addChild(modeTitle, false);
-    y += 22;
+    const noteNodes = snapshot.mode.notes.map((note) => bullet(ctx, { width, text: note } as any));
+    const auditHeading = sectionHeading(ctx, 0, 0, '运行审计');
+    const auditNodes = snapshot.issues.length
+      ? snapshot.issues.slice(0, 4).map((issue) =>
+          paragraph(ctx, {
+            width,
+            text: `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`,
+            fontSize: 11,
+            color: issue.level === 'error' ? theme.colors.error : theme.colors.warning,
+          } as any)
+        )
+      : [paragraph(ctx, { width, text: '✅ 全厂指标在设计与标准区间内', color: theme.colors.success } as any)];
 
-    snapshot.mode.notes.forEach((note) => {
-      const node = bullet(ctx, { left: CARD_INSET, top: y, width, text: note });
-      notesBody.addChild(node, false);
-      y += Math.max(20, Math.ceil(note.length / (width / 12)) * 19) + 2;
-    });
-
-    y += 6;
-    notesBody.addChild(sectionHeading(ctx, CARD_INSET, y, '运行审计'), false);
-    y += 20;
-
-    if (!snapshot.issues.length) {
-      notesBody.addChild(
-        paragraph(ctx, { left: CARD_INSET, top: y, width, text: '✅ 全厂指标在设计与标准区间内', color: theme.colors.success }),
-        false
-      );
-      y += 20;
-    } else {
-      snapshot.issues.slice(0, 4).forEach((issue) => {
-        const node = paragraph(ctx, {
-          left: CARD_INSET,
-          top: y,
-          width,
-          text: `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`,
-          fontSize: 11,
-          color: issue.level === 'error' ? theme.colors.error : theme.colors.warning,
-        });
-        notesBody.addChild(node, false);
-        const lines = Math.max(1, Math.ceil((issue.message.length + 3) / (width / 11)));
-        y += lines * 18 + 2;
-      });
-      if (snapshot.issues.length > 4) {
-        notesBody.addChild(
-          paragraph(ctx, { left: CARD_INSET, top: y, width, text: `…还有 ${snapshot.issues.length - 4} 条（见「运行数据」页）`, fontSize: 11 }),
-          false
-        );
-      }
+    const stack = [modeTitle].concat(noteNodes).concat([auditHeading]).concat(auditNodes);
+    if (snapshot.issues.length > 4) {
+      stack.push(paragraph(ctx, { width, text: `…还有 ${snapshot.issues.length - 4} 条（详见「事件中心」）`, fontSize: 11 } as any));
     }
-    notesBody.addChild(
-      new ICELabel({
-        left: CARD_INSET,
-        top: notesRect.height - CARD_INSET - 16,
-        width,
-        text: `停运单元 ${snapshot.idleCount} 个 · 走线 ${snapshot.trace.path.length} 个单元`,
-        style: { fontSize: 11, fillStyle: theme.colors.textTertiary },
-      }),
-      false
-    );
+    stack.forEach((node) => notesBody.addChild(node, false));
+    // 正文从标题带下方开始（卡片标题占 0~44）
+    stackColumn(stack, { left: CARD_INSET, top: 52, width, gap: 6, gapAfter: (index) => (index === 0 ? 4 : 0) });
+
+    const footer = new ICELabel({
+      width,
+      text: `停运单元 ${snapshot.idleCount} 个 · 走线 ${snapshot.trace.path.length} 个单元`,
+      style: { fontSize: 11, fillStyle: theme.colors.textTertiary },
+    });
+    notesBody.addChild(footer, false);
+    footer.setState({ left: CARD_INSET, top: notesRect.height - CARD_INSET - 16 });
   }
 
   function renderConsole(snapshot: ProcessSnapshot): void {

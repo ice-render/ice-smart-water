@@ -180,8 +180,16 @@ export async function clickSubmenu(
   parentKey: string,
   childKey: string
 ): Promise<void> {
-  await clickWidget(page, '#canvas-shell', `${menuExpr}.getItemNode('${parentKey}')`);
-  await page.waitForTimeout(320);
+  // 已经展开就别再点父项了：`toggleExpand` 是**开关**，再点一次会把子项收起（踩过）
+  const expanded = await page.evaluate((payload) => {
+    // eslint-disable-next-line no-new-func
+    const menu = new Function(`return ${payload.menuExpr}`)();
+    return !!menu.getItemNode(payload.childKey);
+  }, { menuExpr, childKey });
+  if (!expanded) {
+    await clickWidget(page, '#canvas-shell', `${menuExpr}.getItemNode('${parentKey}')`);
+    await page.waitForTimeout(320);
+  }
   await clickWidget(page, '#canvas-shell', `${menuExpr}.getItemNode('${childKey}')`);
 }
 
@@ -256,4 +264,112 @@ export async function expectViewportInteractions(
   await clickWidget(page, '#canvas-shell', options.resetExpr);
   await page.waitForTimeout(200);
   expect(await viewportOf()).toMatchObject({ scale: 1, tx: 0, ty: 0 });
+}
+
+/**
+ * 版面体检：把可见页子树里「我排的容器」的矩形取出来，找任意两个相交。
+ *
+ * 为什么需要它：页面里大量位置是我算的（卡片、行、栈），一处算错就是"压字"——
+ * 而这类问题**截图看不出来**（人眼会以为是设计），只有把矩形两两比一遍才抓得到。
+ *
+ * 两条口径：
+ * - **祖先判定按对象身份**，不能按 `state.id || 类名`：匿名节点的类名会被当成 id，
+ *   与父链里的同名条目撞上，真交叠会被误判成父子而跳过（踩过）；
+ * - **控件内部不再往下审**：滑块的轨道与滑块头、表格单元格本来就有意叠在一起。
+ *   也不能拿 `getFormValue` 判"是控件"——基类上就有它，会把所有节点都判成控件（踩过）。
+ */
+export type LayoutAudit = {
+  page: string;
+  hits: string[];
+  outside: string[];
+  nodeCount: number;
+};
+
+export async function layoutAudit(page: Page): Promise<LayoutAudit> {
+  return page.evaluate(() => {
+    const w = (window as any).__water;
+    const shell = w.shell;
+    const chrome = ['shell-bg', 'sidebar', 'header', 'fab'];
+    const pageNode = (shell.ice.childNodes || []).filter(
+      (n: any) =>
+        n.state &&
+        n.state.display !== false &&
+        chrome.indexOf(String(n.state.id)) < 0 &&
+        (Number(n.state.width) || 0) >= shell.layout.content.width
+    )[0];
+    if (!pageNode) return { page: shell.current(), hits: ['没有找到可见页节点'], outside: [], nodeCount: 0 };
+
+    const world = (node: any) => {
+      let l = 0;
+      let t = 0;
+      let c = node;
+      while (c && c.state) {
+        l += Number(c.state.left) || 0;
+        t += Number(c.state.top) || 0;
+        c = c.parentNode;
+      }
+      return { l, t, w: Number(node.state.width) || 0, h: Number(node.state.height) || 0 };
+    };
+    const isLibraryControl = (n: any) =>
+      typeof n.getSelectedRows === 'function' ||
+      typeof n.getThumbs === 'function' ||
+      typeof n.getItemNode === 'function' ||
+      typeof n.getTextNodes === 'function' ||
+      typeof n.getLabelTexts === 'function' ||
+      typeof n.getToggleButton === 'function';
+
+    const nodes: any[] = [];
+    const collect = (node: any, ancestors: any[]) => {
+      if (!node || !node.state || node.state.display === false) return;
+      const box = world(node);
+      const label = String(node.state.id || node.constructor.name);
+      if (box.w > 0 && box.h > 0) nodes.push({ node, label, box, ancestors });
+      if (isLibraryControl(node)) return;
+      const next = ancestors.concat([node]);
+      (node.childNodes || []).forEach((kid: any) => collect(kid, next));
+    };
+    collect(pageNode, []);
+
+    const hits: string[] = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i];
+        const b = nodes[j];
+        if (a.ancestors.indexOf(b.node) >= 0 || b.ancestors.indexOf(a.node) >= 0) continue;
+        const ox = Math.min(a.box.l + a.box.w, b.box.l + b.box.w) - Math.max(a.box.l, b.box.l);
+        const oy = Math.min(a.box.t + a.box.h, b.box.t + b.box.h) - Math.max(a.box.t, b.box.t);
+        const aInB = a.box.l >= b.box.l && a.box.t >= b.box.t && a.box.l + a.box.w <= b.box.l + b.box.w && a.box.t + a.box.h <= b.box.t + b.box.h;
+        const bInA = b.box.l >= a.box.l && b.box.t >= a.box.t && b.box.l + b.box.w <= a.box.l + a.box.w && b.box.t + b.box.h <= a.box.t + a.box.h;
+        if (ox > 2 && oy > 2 && !aInB && !bInA) {
+          hits.push(
+            a.label + '[' + Math.round(a.box.l) + ',' + Math.round(a.box.t) + ' ' + Math.round(a.box.w) + 'x' + Math.round(a.box.h) + ']' +
+              ' x ' +
+              b.label + '[' + Math.round(b.box.l) + ',' + Math.round(b.box.t) + ' ' + Math.round(b.box.w) + 'x' + Math.round(b.box.h) + ']'
+          );
+        }
+      }
+    }
+
+    const content = shell.layout.content;
+    const outside = nodes
+      .filter(
+        (n) =>
+          n.node !== pageNode &&
+          (n.box.l < content.left - 2 ||
+            n.box.t < content.top - 2 ||
+            n.box.l + n.box.w > content.left + content.width + 2 ||
+            n.box.t + n.box.h > content.top + content.height + 2)
+      )
+      .map((n) => n.label + '@' + Math.round(n.box.l) + ',' + Math.round(n.box.t) + ' ' + Math.round(n.box.w) + 'x' + Math.round(n.box.h));
+
+    return { page: shell.current(), hits: hits.slice(0, 10), outside: outside.slice(0, 10), nodeCount: nodes.length };
+  });
+}
+
+/** 当前页所有卡片在内容区内的可见性（滚动条检查用） */
+export async function pageOverflow(page: Page): Promise<{ x: number; y: number }> {
+  return page.evaluate(() => ({
+    x: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    y: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+  }));
 }

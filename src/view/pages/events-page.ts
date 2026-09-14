@@ -132,7 +132,8 @@ export function buildEventsPage(ctx: PageContext, deps: EventsPageDeps): EventsP
     rowSelection: 'multiple',
     pagination: { pageSize: 6, showTotal: true },
     columns: [
-      { key: 'time', title: '时刻', width: 76, sorter: true },
+      // 时刻列给足宽度：「昨 08:12」这类标签实测要 54px，列宽 76 会溢出到下一列（实测抓出来的）
+      { key: 'time', title: '时刻', width: 108, sorter: true },
       {
         key: 'level',
         title: '级别',
@@ -157,7 +158,7 @@ export function buildEventsPage(ctx: PageContext, deps: EventsPageDeps): EventsP
         },
       },
       { key: 'unit', title: '单元 / 位号', width: 168 },
-      { key: 'title', title: '报警内容', width: 400 },
+      { key: 'title', title: '报警内容', width: 368 },
       {
         key: 'status',
         title: '状态',

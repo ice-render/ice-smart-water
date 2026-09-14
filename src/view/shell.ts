@@ -149,6 +149,13 @@ export type ShellOptions = {
   brandSub: string;
   menu: ShellMenuItem[];
   selectedKey: string;
+  /**
+   * 侧栏**父项**展开 / 收起时的回调。
+   *
+   * 父项（"运行工况"、"符号分类"）点一下只展开、不触发 `onMenuSelect` —— 这是上游的设计，
+   * 但对用户来说就是"点了没反应"。用它补上跳转与提示。
+   */
+  onMenuExpand?: (key: string, expanded: boolean) => void;
   onMenuSelect: (key: string, item: any) => void;
   pages: ShellPage[];
   /** 侧栏底部署名 */
@@ -296,6 +303,9 @@ export function mountShell(options: ShellOptions): ShellHandle {
     selectedKey: options.selectedKey,
     style: { fillStyle: theme.colors.surface },
     onSelect: (item: any) => options.onMenuSelect(item.key, item),
+    onExpand: (key: string, expanded: boolean) => {
+      if (options.onMenuExpand) options.onMenuExpand(key, expanded);
+    },
   });
   sidebar.addChildren([brand, brandSub, menu, ...sidebarFooter] as any);
   ice.addChild(sidebar);
@@ -645,6 +655,29 @@ export function cardBodyRect(rect: Rect): Rect {
     width: rect.width - CARD_INSET * 2,
     height: rect.height - CARD_TITLE_BAND - CARD_INSET,
   };
+}
+
+/**
+ * 纵向流式布局：按每个节点的**实际高度**依次下排，返回内容总高（最后一项的底边）。
+ *
+ * 为什么必须有它：卡片正文里的"标题 + 若干段落 + 若干要点"如果靠手算 y 递增，
+ * 只要有一处估高偏小就会**压字**（实测踩过：标题 16px 高但按 20px 递增、段落估少一行）。
+ * 交给它按 `state.height` 排就不会错；文案变了再调一次即可（幂等）。
+ *
+ * `gapAfter` 可以对某一项单独加大间距（例如标题下面多留一点）。
+ */
+export function stackColumn(
+  children: any[],
+  options: { left?: number; top?: number; width: number; gap?: number; gapAfter?: (index: number) => number }
+): number {
+  const left = options.left === undefined ? 0 : options.left;
+  const gap = options.gap === undefined ? 6 : options.gap;
+  let y = options.top === undefined ? 0 : options.top;
+  children.forEach((child, index) => {
+    child.setState({ left, top: y, width: options.width });
+    y += (Number(child.state.height) || 0) + gap + (options.gapAfter ? options.gapAfter(index) : 0);
+  });
+  return y - gap;
 }
 
 /** 空节点：只用来占位 / 承载子节点 */

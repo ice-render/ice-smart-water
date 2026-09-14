@@ -115,10 +115,14 @@ npm run serve        # 静态服务 dist（端口 8092）
 
 ```bash
 npm run types:check  # tsc --noEmit
-npm test             # jest：domain 纯逻辑单测（61 项）
-npm run test:e2e     # playwright：两个入口页的端到端回归（16 项，先自动 build）
+npm test             # jest：domain 纯逻辑单测
+npm run test:e2e     # playwright：端到端回归（含版面体检，先自动 build）
 npm run verify       # types:check + test + build
 ```
+
+**版面体检**（`e2e/layout.spec.ts`）：把每个页面里"我排的容器"的矩形两两比一遍，
+断言**零相交、零出界、零滚动条**；并且有一条**敏感度自检** —— 故意把一张卡压到另一张上，
+体检必须抓得住（否则这个测试就是摆设）。这类问题截图看不出来（人眼容易当成设计）。
 
 > `@playwright/test` 用 `channel: 'chrome'`（系统 Chrome）。Playwright 自带的无头壳版本
 > 与本地缓存经常对不上，用系统 Chrome 能绕开这个坑。
