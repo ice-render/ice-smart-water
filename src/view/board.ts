@@ -26,6 +26,9 @@ export type ChartHandle = {
  */
 export function mountChart(canvas: HTMLCanvasElement, buildOption: () => ChartOption): ChartHandle {
   const chart = createChart(canvas, buildOption(), { autoResize: true, renderMode: 'dirty-rect' });
+  // 立刻按容器实测尺寸对齐一次：`createChart` 只按画布当前尺寸布图，
+  // 而画布刚被塞进"岛"里时还是 300×150 的默认尺寸。容器不可见时 resize() 会自己跳过。
+  if (typeof chart.resize === 'function') chart.resize();
   return {
     chart,
     refresh(): void {

@@ -1,33 +1,30 @@
 import { expect, type Page } from '@playwright/test';
 
 /**
- * 画布相关的公共断言工具。
+ * 画布应用的公共断言工具（整页画布化之后，界面里几乎没有可选择的 DOM，
+ * 一切都要"按画布坐标点、按像素判"）。
  *
- * 两条口径与家族其它仓库一致：
- * 1. **画布元素存在 ≠ 画出来了** —— 一律用像素判定（颜色种数、非白像素数）；
- * 2. 事件坐标用「canvas 内部坐标 + 元素左上角偏移」，先断言这个坐标上是 canvas，
- *    坐标算错时立刻报错，而不是让后面的断言莫名其妙失败。
+ * 三条口径：
+ * 1. **画布元素存在 ≠ 画出来了** —— 一律用像素判定；
+ *    ⚠️ 画布背景是**透明**的（底色由页面 CSS 给），统计时必须排除 alpha≈0 的像素，
+ *    否则"非白像素占比"恒等于 1，断言看着通过其实什么都没验证。
+ * 2. 点画布控件要点**子项中心**：控件的可点区域是它的每一档/每个选项，
+ *    点在父容器的缝隙上会命中容器本身（没有 click 处理）→ 表现成"点了没反应"。
+ * 3. 累加世界坐标的循环条件必须用 `state` 而不是 `parentNode`：
+ *    直接挂在 `ICE` 实例上的组件 `parentNode` 是空的，用 parentNode 判终止会漏掉那一层偏移。
  */
 
 export type CanvasStats = {
   width: number;
   height: number;
-  /** 采样到的不同颜色数（只统计**真正画上去的**像素，透明像素不算） */
+  /** 采样到的不同颜色数（只统计真正画上去的像素） */
   colors: number;
   /** 画上去的像素占比（alpha > 8）——"有没有画"用这个 */
   opaqueRatio: number;
-  /** 落墨占比：画上去、且不是近白色的像素 ——"画的是不是一片白"用这个 */
+  /** 落墨占比：画上去且不是近白色的像素 ——"是不是一片白"用这个 */
   inkRatio: number;
 };
 
-/**
- * 用像素判定"画布真的画出来了"。
- *
- * 两个坑：
- * 1. **画布背景是透明的**（底色由页面 CSS 给），不排除透明像素的话，
- *    "非白像素占比"会恒等于 1 —— 断言看似通过，其实什么都没验证；
- * 2. 采样要跳步（`4 * 53`）：1180×583 的画布逐像素扫会拖慢每个用例。
- */
 export async function canvasStats(page: Page, selector: string): Promise<CanvasStats> {
   return page.evaluate((sel) => {
     const canvas = document.querySelector(sel) as HTMLCanvasElement;
@@ -40,10 +37,9 @@ export async function canvasStats(page: Page, selector: string): Promise<CanvasS
     let samples = 0;
     for (let index = 0; index < data.length; index += 4 * 53) {
       samples += 1;
-      if (data[index + 3] < 8) continue; // 透明：没画东西
+      if (data[index + 3] < 8) continue;
       opaque += 1;
-      const key = `${data[index]},${data[index + 1]},${data[index + 2]}`;
-      colors.add(key);
+      colors.add(`${data[index]},${data[index + 1]},${data[index + 2]}`);
       if (data[index] < 245 || data[index + 1] < 245 || data[index + 2] < 245) ink += 1;
     }
     return {
@@ -56,7 +52,7 @@ export async function canvasStats(page: Page, selector: string): Promise<CanvasS
   }, selector);
 }
 
-/** 把 canvas 内部坐标换成页面坐标，校验该点确实落在画布上，并把鼠标移过去 */
+/** canvas 内部坐标 → 页面坐标，校验该点确实落在目标画布上，并把鼠标移过去 */
 export async function canvasPoint(
   page: Page,
   selector: string,
@@ -75,9 +71,8 @@ export async function canvasPoint(
     const el = document.elementFromPoint(payload.x, payload.y);
     return el ? el.id || el.tagName : null;
   }, point);
-  expect(under, `坐标 ${JSON.stringify(point)} 上应当是目标画布`).toBe(selector.replace('#', ''));
-  // 必须真的把指针移过去：`page.mouse.wheel` 是在**当前指针位置**派发的，
-  // 不先 move 的话滚轮事件落在 (0,0)，页面看起来"缩放失灵"。
+  expect(under, `坐标 ${JSON.stringify(point)} 上应当是 ${selector}`).toBe(selector.replace('#', ''));
+  // 必须真的把指针移过去：`page.mouse.wheel` 在**当前指针位置**派发，不先 move 就"缩放失灵"
   await page.mouse.move(point.x, point.y);
   return point;
 }
@@ -86,18 +81,14 @@ export async function canvasPoint(
 export async function clickCanvas(page: Page, selector: string, x: number, y: number): Promise<void> {
   const point = await canvasPoint(page, selector, x, y);
   await page.mouse.click(point.x, point.y);
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(200);
 }
 
 /**
  * 算一个画布组件的**世界中心**（相对画布左上角），再换算成页面坐标。
  *
- * 为什么要这么点，而不是背坐标：画布控件（ice-web-components）的可点区域是它的**子项**
- * （例如单选组的每一档），父容器只负责布局。点在父容器的空白处（档与档之间的缝隙）
- * 命中到的是容器本身，它没有 click 处理 —— 表现就是"点上去没反应"，很容易误判成功能坏了。
- * 所以从组件往上累加 left/top 得到世界坐标，再取子项中心来点。
- *
- * 返回的是**页面坐标**（可直接给 page.mouse.click），换算与断言都在 canvasPoint 里做。
+ * `expression` 是**在浏览器里**求值的表达式（纯 JS，不能带 TS 类型断言），
+ * 例如 `window.__water.shell.find('menu').getItemNode('data')`。
  */
 export async function componentCenter(
   page: Page,
@@ -112,17 +103,12 @@ export async function componentCenter(
       let left = 0;
       let top = 0;
       let cursor = node;
-      // 循环条件是 `state` 而不是 `parentNode`：**引擎根节点的直接子节点 parentNode 是空的**
-      // （挂到 ICE 实例上的组件没有回指父级），用 parentNode 判终止会漏掉挂在画布上的那一层偏移。
       while (cursor && cursor.state) {
         left += Number(cursor.state.left) || 0;
         top += Number(cursor.state.top) || 0;
         cursor = cursor.parentNode;
       }
-      return {
-        x: left + (node.state.width || 0) / 2,
-        y: top + (node.state.height || 0) / 2,
-      };
+      return { x: left + (Number(node.state.width) || 0) / 2, y: top + (Number(node.state.height) || 0) / 2 };
     },
     { expression }
   );
@@ -130,31 +116,88 @@ export async function componentCenter(
   return canvasPoint(page, selector, (center as any).x, (center as any).y);
 }
 
-/** 点画布控件里的第 index 个子项（从 0 开始） */
-export async function clickCanvasChild(
-  page: Page,
-  selector: string,
-  ownerExpression: string,
-  index: number
-): Promise<void> {
-  const center = await componentCenter(page, selector, `${ownerExpression}.childNodes[${index}]`);
+/** 点一个画布组件（真鼠标事件，走引擎的命中测试路径） */
+export async function clickWidget(page: Page, selector: string, expression: string): Promise<void> {
+  const center = await componentCenter(page, selector, expression);
   await page.mouse.click(center.x, center.y);
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(280);
 }
 
-/** 三段式视口回归：滚轮缩放 → 拖拽平移 → 复位 */
-export async function expectViewportInteractions(page: Page, selector: string, resetSelector: string): Promise<void> {
+/** 一个画布组件在**画布坐标系**里的矩形（累加父链的 left/top） */
+export async function widgetWorldRect(
+  page: Page,
+  expression: string
+): Promise<{ left: number; top: number; width: number; height: number }> {
+  const rect = await page.evaluate((expr) => {
+    // eslint-disable-next-line no-new-func
+    const node = new Function(`return ${expr}`)();
+    if (!node) return null;
+    let left = 0;
+    let top = 0;
+    let cursor = node;
+    while (cursor && cursor.state) {
+      left += Number(cursor.state.left) || 0;
+      top += Number(cursor.state.top) || 0;
+      cursor = cursor.parentNode;
+    }
+    return { left, top, width: Number(node.state.width) || 0, height: Number(node.state.height) || 0 };
+  }, expression);
+  expect(rect, `没能算出组件矩形：${expression}`).not.toBeNull();
+  return rect as { left: number; top: number; width: number; height: number };
+}
+
+/** 岛（DOM 画布）在**外壳坐标系**里的矩形 */
+export async function islandRect(
+  page: Page,
+  islandId: string
+): Promise<{ left: number; top: number; width: number; height: number }> {
+  return page.evaluate((id) => {
+    const shell = (document.querySelector('#canvas-shell') as HTMLElement).getBoundingClientRect();
+    const host = document.getElementById(`island-${id}`) as HTMLElement;
+    const rect = host.getBoundingClientRect();
+    return {
+      left: rect.left - shell.left,
+      top: rect.top - shell.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }, islandId);
+}
+
+/**
+ * 点侧栏里的**二级菜单项**：先点父项把它展开，再点子项。
+ *
+ * 子项节点在父项展开之前**不存在**（`getItemNode` 返回 null）——
+ * 这不是缺陷，而是"内联展开"的实现方式；测试要按真实交互顺序来。
+ */
+export async function clickSubmenu(
+  page: Page,
+  menuExpr: string,
+  parentKey: string,
+  childKey: string
+): Promise<void> {
+  await clickWidget(page, '#canvas-shell', `${menuExpr}.getItemNode('${parentKey}')`);
+  await page.waitForTimeout(320);
+  await clickWidget(page, '#canvas-shell', `${menuExpr}.getItemNode('${childKey}')`);
+}
+
+/** 三段式视口回归：滚轮缩放 → 中键拖拽平移 → 复位 */
+export async function expectViewportInteractions(
+  page: Page,
+  selector: string,
+  options: { viewportExpr: string; resetExpr: string }
+): Promise<void> {
   const box = await page.evaluate((sel) => {
     const canvas = document.querySelector(sel) as HTMLCanvasElement;
     const rect = canvas.getBoundingClientRect();
-    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    return { width: rect.width, height: rect.height };
   }, selector);
 
   const viewportOf = () =>
-    page.evaluate(() => {
-      const ice = (window as any).__water ? (window as any).__water.ice : (window as any).__symbols.ice;
-      return { ...ice.viewport };
-    });
+    page.evaluate((expr) => {
+      // eslint-disable-next-line no-new-func
+      return { ...new Function(`return ${expr}`)().viewport };
+    }, options.viewportExpr);
 
   const before = await viewportOf();
   const centerX = Math.round(box.width / 2);
@@ -173,7 +216,7 @@ export async function expectViewportInteractions(page: Page, selector: string, r
   const panned = await viewportOf();
   expect([panned.tx, panned.ty]).not.toEqual([zoomed.tx, zoomed.ty]);
 
-  await page.click(resetSelector);
-  await page.waitForTimeout(150);
+  await clickWidget(page, '#canvas-shell', options.resetExpr);
+  await page.waitForTimeout(200);
   expect(await viewportOf()).toMatchObject({ scale: 1, tx: 0, ty: 0 });
 }

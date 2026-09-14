@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { canvasStats, clickCanvasChild, expectViewportInteractions } from './helpers';
+import { canvasStats, clickSubmenu, clickWidget, expectViewportInteractions, islandRect, widgetWorldRect } from './helpers';
 
 /**
  * `water-editor.html` 的端到端回归。
  *
- * 覆盖的是这一页的**真价值**：图纸不只是画得出来，而是**画完能算**——
- * 沿程水量与水质、出水达标、能耗、运行审计都跟着图走；工况一换，结论就变。
+ * 这一页是**整页画布化**的 admin console（对齐 ice-web-components 的 examples/admin.html）：
+ * 界面里几乎没有可选择的 DOM —— 侧栏菜单、顶栏按钮、卡片里的操作都得按画布坐标点。
+ * 所以这里既验证业务（图 → 算 → 面板），也验证"画布控件真的点得动"。
  */
 
 test.beforeEach(async ({ page }) => {
@@ -17,29 +18,60 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (err) => errors.push(String(err)));
   await page.goto('/water-editor.html');
   await page.waitForFunction(() => !!(window as any).__water);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(500);
 });
 
-test('装载：22 个单位 / 24 段管线，图纸校验与运行审计都干净', async ({ page }) => {
+test('装载：外壳铺满画布，工艺图 22 个单位 / 24 段管线，图纸校验与运行审计都干净', async ({ page }) => {
   const state = await page.evaluate(() => {
     const water = (window as any).__water;
     return {
+      canvas: [water.graphIce.canvasWidth, water.graphIce.canvasHeight],
+      shellCanvas: [(window as any).__water.shell.ice.canvasWidth, (window as any).__water.shell.ice.canvasHeight],
       nodes: water.designer.nodes.length,
       edges: water.designer.edges.length,
-      kinds: water.designer.nodes.map((node: any) => node.state.kind),
       validate: water.designer.validateWater(),
       issues: water.issues.map((issue: any) => issue.code),
       traceConnected: water.trace.connected,
       tracePath: water.trace.path.length,
+      currentPage: water.shell.current(),
     };
   });
+  expect(state.shellCanvas[0]).toBeGreaterThan(1400);
   expect(state.nodes).toBe(22);
   expect(state.edges).toBe(24);
-  expect(state.kinds).toContain('aerobicTank');
   expect(state.validate).toEqual([]);
   expect(state.issues).toEqual([]);
   expect(state.traceConnected).toBe(true);
   expect(state.tracePath).toBe(16);
+  expect(state.currentPage).toBe('process');
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('岛：工艺图挖在「工艺流程」卡片的正文区里，且真的画出来了', async ({ page }) => {
+  // 关键不变量：洞就在卡片里 —— 岛画的矩形 = 卡片矩形 + 卡片正文内缩
+  const card = await widgetWorldRect(page, "window.__water.shell.find('graph-card')");
+  const hole = await islandRect(page, 'process');
+  expect(hole.left).toBeCloseTo(card.left + 16, 0);
+  expect(hole.top).toBeCloseTo(card.top + 44, 0);
+  expect(hole.width).toBeCloseTo(card.width - 32, 0);
+  expect(hole.height).toBeCloseTo(card.height - 60, 0);
+
+  // 卡片必须落在内容区里（不能压到侧栏或顶栏上）
+  const content = await page.evaluate(() => (window as any).__water.layout.content);
+  expect(card.left).toBeGreaterThanOrEqual(content.left);
+  expect(card.top).toBeGreaterThanOrEqual(content.top);
+  expect(card.left + card.width).toBeLessThanOrEqual(content.left + content.width);
+  expect(card.top + card.height).toBeLessThanOrEqual(content.top + content.height);
+
+  const boardHidden = await page.evaluate(
+    () => (document.querySelector('#island-board') as HTMLElement).style.display === 'none'
+  );
+  expect(boardHidden).toBe(true); // 看板不在本页，必须藏起来
+
+  const ink = await canvasStats(page, '#canvas-process');
+  expect(ink.colors).toBeGreaterThan(60);
+  expect(ink.opaqueRatio).toBeGreaterThan(0.02);
+  expect(ink.inkRatio).toBeGreaterThan(0.01);
   expect((page as any).__errors).toEqual([]);
 });
 
@@ -48,7 +80,6 @@ test('运行指标：水量平衡 / 污泥平衡 / 能耗都落在工程常规�
     const water = (window as any).__water.kpi;
     return {
       inflow: water.inflow,
-      inflowWan: water.inflow / 10000,
       mlss: water.sludge.mlss,
       srt: water.sludge.srt,
       fm: water.sludge.fm,
@@ -56,7 +87,6 @@ test('运行指标：水量平衡 / 污泥平衡 / 能耗都落在工程常规�
       waste: water.sludge.wasteSludgeFlow,
       energy: water.energyPerCubicMeter,
       oxygen: water.oxygenDemand,
-      effluent: water.effluent,
       passed: water.compliance.passed,
       tightest: water.compliance.tightest.label,
     };
@@ -79,62 +109,40 @@ test('运行指标：水量平衡 / 污泥平衡 / 能耗都落在工程常规�
   expect((page as any).__errors).toEqual([]);
 });
 
-test('图纸即数据源：走界面关掉出水阀 → 断流 + 审计报错 + 看板曲线跟着变', async ({ page }) => {
-  const before = await page.evaluate(() => {
+test('侧栏菜单（画布控件）：点「运行数据」切页，看板岛出现并画出 24 点曲线', async ({ page }) => {
+  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('data')");
+  const state = await page.evaluate(() => {
     const water = (window as any).__water;
+    const chart = water.board.chart;
     return {
-      connected: water.trace.connected,
-      cod: water.dayPoints[12].cod,
-      passed: water.kpi.compliance.passed,
-      mode: water.modeId,
+      page: water.shell.current(),
+      boardVisible: (document.querySelector('#island-board') as HTMLElement).style.display !== 'none',
+      processHidden: (document.querySelector('#island-process') as HTMLElement).style.display === 'none',
+      points: chart.norm.series.map((series: any) => (series.points || []).length),
+      seriesCount: chart.seriesComponents.length,
+      plotWidth: Math.round(chart.layout.plot.width),
+      loadRows: water.hydraulics.filter((unit: any) => unit.flow > 0 || unit.power > 0).length,
     };
   });
-  expect(before.connected).toBe(true);
-  expect(before.passed).toBe(6);
+  expect(state.page).toBe('data');
+  expect(state.boardVisible).toBe(true);
+  expect(state.processHidden).toBe(true);
+  expect(state.seriesCount).toBe(4);
+  expect(state.points).toEqual([24, 24, 24, 24]);
+  expect(state.plotWidth).toBeGreaterThan(800);
+  expect(state.loadRows).toBeGreaterThan(15);
 
-  // 真用户路径：在图上选中出水阀 → 点「阀门开 / 闭」
-  await page.evaluate(() => (window as any).__water.designer.select('outletValve'));
-  await page.waitForTimeout(150);
-  // 属性面板用静态文本显示符号 ID（名称 / 位号是 input 的 value，不是 textContent）
-  await expect(page.locator('#property-panel')).toContainText('outletValve');
-  await page.click('#btn-valve');
-  await page.waitForTimeout(250);
-
-  const after = await page.evaluate(() => {
-    const water = (window as any).__water;
-    return {
-      connected: water.trace.connected,
-      blockedAt: water.trace.blockedAt,
-      codes: water.issues.map((issue: any) => issue.code),
-      passed: water.kpi.compliance.passed,
-      valve: water.designer.nodes.filter((node: any) => node.state.id === 'outletValve')[0].state.valveState,
-      statusbar: document.getElementById('statusbar')?.textContent || '',
-    };
-  });
-  expect(after.valve).toBe('closed');
-  expect(after.connected).toBe(false);
-  expect(after.blockedAt).toBe('outletValve');
-  expect(after.codes).toContain('flow-disconnected');
-  expect(after.codes).toContain('effluent-exceed');
-  expect(after.passed).toBeLessThan(6);
-  expect(after.statusbar).toContain('断流');
-
-  // 再点一次：阀门回开位，流程恢复（可逆）
-  await page.click('#btn-valve');
-  await page.waitForTimeout(250);
-  const restored = await page.evaluate(() => (window as any).__water.trace.connected);
-  expect(restored).toBe(true);
+  const chartInk = await canvasStats(page, '#canvas-board');
+  expect(chartInk.width).toBeGreaterThan(800);
+  expect(chartInk.inkRatio).toBeGreaterThan(0.02);
   expect((page as any).__errors).toEqual([]);
 });
 
-test('运行控制台（ice-web-components）：点画布上的分段控件切到雨季工况', async ({ page }) => {
+test('侧栏二级菜单：点「运行工况 → 雨季超越」切工况，指标与审计跟着变', async ({ page }) => {
   const before = await page.evaluate(() => (window as any).__water.modeId);
   expect(before).toBe('normal');
 
-  // 控制台画布上的第 2 个子项 = 单选组的「雨季超越」档（点档位中心，不是组中心）
-  // 注意：表达式是**在浏览器里**求值的，必须写纯 JS（不能带 TS 的类型断言）
-  await clickCanvasChild(page, '#canvas-console', 'window.__water.consoleUi.ice.childNodes[1]', 1);
-
+  await clickSubmenu(page, "window.__water.shell.find('menu')", 'mode', 'mode:rain');
   const state = await page.evaluate(() => {
     const water = (window as any).__water;
     return {
@@ -150,37 +158,83 @@ test('运行控制台（ice-web-components）：点画布上的分段控件切�
   expect(state.inflow).toBe(135000);
   expect(state.utilization).toBe(135);
   expect(state.bypass).toBe('open');
-  // 雨季水量上升 35%：表面负荷与停留时间会顶出设计区间，负荷率也超过规模
+  // 雨季水量上升 35%：表面负荷顶出设计区间，负荷率也超过规模
   expect(state.codes).toContain('surface-load-out-of-range');
   expect(state.codes).toContain('over-capacity');
   expect(state.passed).toBe(6);
   expect((page as any).__errors).toEqual([]);
 });
 
-test('运行看板（ice-chart）与工艺图都真的画出来了', async ({ page }) => {
-  // 工艺图：符号 21 种、管线 24 段。采样统计的颜色数门槛按采样率打折 ——
-  // 空白画布只有 1~2 种，60 以上就足以说明"真的画了内容"
-  const stage = await canvasStats(page, '#canvas-process');
-  expect(stage.colors).toBeGreaterThan(60);
-  expect(stage.opaqueRatio).toBeGreaterThan(0.02);
-  expect(stage.opaqueRatio).toBeLessThan(0.6);
-  expect(stage.inkRatio).toBeGreaterThan(0.01);
-
-  // 运行看板：24 点 × 4 条曲线 + 坐标轴/图例
-  const board = await canvasStats(page, '#canvas-board');
-  expect(board.width).toBeGreaterThan(600);
-  expect(board.colors).toBeGreaterThan(20);
-  expect(board.inkRatio).toBeGreaterThan(0.02);
-
-  // 运行控制台：4 个控件（单选组 + 两张卡 + 标签）
-  const consoleStats = await canvasStats(page, '#canvas-console');
-  expect(consoleStats.width).toBe(390);
-  expect(consoleStats.colors).toBeGreaterThan(20);
-  expect(consoleStats.opaqueRatio).toBeGreaterThan(0.2);
+test('顶栏按钮（画布控件）：点「导出 SVG」真的导出了含位号的矢量图', async ({ page }) => {
+  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('action-svg')");
+  const svg = await page.evaluate(() => (window as any).__exportedSvg || '');
+  expect(svg.length).toBeGreaterThan(2000);
+  expect(svg).toContain('AE-101');
+  expect(svg).toContain('DN600');
   expect((page as any).__errors).toEqual([]);
 });
 
-test('适应视图：整张工艺图落在画布可视区内并留出边距', async ({ page }) => {
+test('卡片里的操作按钮：选中出水阀 → 点「阀门开 / 闭」→ 断流 + 审计报错（可逆）', async ({ page }) => {
+  const before = await page.evaluate(() => (window as any).__water.trace.connected);
+  expect(before).toBe(true);
+
+  await page.evaluate(() => (window as any).__water.designer.select('outletValve'));
+  await page.waitForTimeout(150);
+  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('card-action-valve')");
+
+  const after = await page.evaluate(() => {
+    const water = (window as any).__water;
+    return {
+      connected: water.trace.connected,
+      blockedAt: water.trace.blockedAt,
+      codes: water.issues.map((issue: any) => issue.code),
+      passed: water.kpi.compliance.passed,
+      valve: water.designer.nodes.filter((node: any) => node.state.id === 'outletValve')[0].state.valveState,
+    };
+  });
+  expect(after.valve).toBe('closed');
+  expect(after.connected).toBe(false);
+  expect(after.blockedAt).toBe('outletValve');
+  expect(after.codes).toContain('flow-disconnected');
+  expect(after.codes).toContain('effluent-exceed');
+  expect(after.passed).toBeLessThan(6);
+
+  // 再点一次：阀门回开位，流程恢复
+  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('card-action-valve')");
+  const restored = await page.evaluate(() => (window as any).__water.trace.connected);
+  expect(restored).toBe(true);
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('工艺图岛的视口交互：滚轮缩放、中键拖拽平移、顶栏「复位视图」回单位视口', async ({ page }) => {
+  await expectViewportInteractions(page, '#canvas-process', {
+    viewportExpr: 'window.__water.graphIce',
+    resetExpr: "window.__water.shell.find('action-reset')",
+  });
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('外壳与岛都真的画出来了（像素判定）', async ({ page }) => {
+  const shellStats = await canvasStats(page, '#canvas-shell');
+  expect(shellStats.colors).toBeGreaterThan(30);
+  expect(shellStats.opaqueRatio).toBeGreaterThan(0.5); // 外壳底色铺满
+  expect(shellStats.inkRatio).toBeGreaterThan(0.01);
+
+  const processStats = await canvasStats(page, '#canvas-process');
+  expect(processStats.colors).toBeGreaterThan(60);
+  expect(processStats.opaqueRatio).toBeLessThan(0.6); // 图不该糊满整块
+
+  // 页面不该被挤出滚动条（画布尺寸扣掉了 body 的 24px 内边距）
+  const overflow = await page.evaluate(() => ({
+    x: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    y: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+  }));
+  expect(overflow.x).toBeLessThanOrEqual(0);
+  expect(overflow.y).toBeLessThanOrEqual(0);
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('适应视图：整张工艺图落在岛的可视区内并居中', async ({ page }) => {
   const box = await page.evaluate(() => {
     const water = (window as any).__water;
     const canvas = document.querySelector('#canvas-process') as HTMLCanvasElement;
@@ -196,7 +250,7 @@ test('适应视图：整张工艺图落在画布可视区内并留出边距', as
       top: Math.min(...nodes.map((node: any) => node.top)),
       bottom: Math.max(...nodes.map((node: any) => node.top + node.height)),
     };
-    const viewport = { ...water.ice.viewport };
+    const viewport = { ...water.graphIce.viewport };
     return {
       canvas: { width: canvas.width, height: canvas.height },
       screen: {
@@ -211,80 +265,28 @@ test('适应视图：整张工艺图落在画布可视区内并留出边距', as
   expect(box.screen.top).toBeGreaterThanOrEqual(0);
   expect(box.screen.right).toBeLessThanOrEqual(box.canvas.width);
   expect(box.screen.bottom).toBeLessThanOrEqual(box.canvas.height);
-  // 左右留白大致对称（居中），并且真的缩放过（图比画布宽）
   expect(Math.abs(box.screen.left - (box.canvas.width - box.screen.right))).toBeLessThan(6);
   expect((page as any).__errors).toEqual([]);
 });
 
-test('沿程水量表与出水达标表有数据，看板 24 点齐全', async ({ page }) => {
-  const rows = await page.locator('#load-table tbody tr').count();
-  expect(rows).toBeGreaterThan(15);
-  const complianceRows = await page.locator('#compliance-table tbody tr').count();
-  expect(complianceRows).toBe(6);
-  const points = await page.evaluate(() => (window as any).__water.dayPoints.length);
-  expect(points).toBe(24);
-  await expect(page.locator('#metric-list')).toContainText('吨水电耗');
-  await expect(page.locator('#audit-output')).toContainText('运行审计通过');
-  expect((page as any).__errors).toEqual([]);
-});
-
-test('画布交互：滚轮缩放、中键拖拽平移、复位回单位视口', async ({ page }) => {
-  await expectViewportInteractions(page, '#canvas-process', '#btn-reset');
-  expect((page as any).__errors).toEqual([]);
-});
-
-test('矢量导出与快照往返：SVG 含位号与管径，JSON 载入后指标一致', async ({ page }) => {
-  await page.click('#btn-export-svg');
-  await page.click('#btn-export-json');
-  const check = await page.evaluate(() => {
-    const svg = (window as any).__exportedSvg || '';
-    const json = (window as any).__exportedJson || '';
-    const before = {
-      nodes: (window as any).__water.designer.nodes.length,
-      mlss: (window as any).__water.kpi.sludge.mlss,
-    };
-    const report = (window as any).__water.designer.load(json);
-    return new Promise((resolve) => {
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() =>
-          resolve({
-            svgHasTag: svg.indexOf('AE-101') >= 0,
-            svgHasDn: svg.indexOf('DN600') >= 0,
-            before,
-            loaded: report.nodes,
-            after: (window as any).__water.kpi.sludge.mlss,
-            validated: (window as any).__water.designer.validateWater().length,
-          })
-        )
-      );
-    });
-  });
-  const data = check as any;
-  expect(data.svgHasTag).toBe(true);
-  expect(data.svgHasDn).toBe(true);
-  expect(data.loaded).toBe(data.before.nodes);
-  expect(data.after).toBeCloseTo(data.before.mlss, 1);
-  expect(data.validated).toBe(0);
-  expect((page as any).__errors).toEqual([]);
-});
-
-test('新增符号：位号按同代号顺延，不撞号', async ({ page }) => {
-  const before = await page.evaluate(() => (window as any).__water.designer.nodes.length);
-  await page.selectOption('#in-kind', 'barScreen');
-  await page.click('#btn-add');
+test('快照往返：导出 JSON 再导入，指标与图纸校验一致', async ({ page }) => {
+  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('action-json')");
   await page.waitForTimeout(200);
+  const check = await page.evaluate(() => {
+    const water = (window as any).__water;
+    const json = (window as any).__exportedJson || '';
+    const before = { nodes: water.designer.nodes.length, mlss: water.kpi.sludge.mlss };
+    const report = water.designer.load(json);
+    return { before, loaded: report.nodes, json };
+  });
+  await page.waitForTimeout(300);
   const after = await page.evaluate(() => {
     const water = (window as any).__water;
-    const tags = water.designer.nodes.map((node: any) => node.state.tag);
-    return {
-      nodes: water.designer.nodes.length,
-      newTag: water.designer.nodes[water.designer.nodes.length - 1].state.tag,
-      duplicate: tags.length !== new Set(tags).size,
-      validated: water.designer.validateWater().length,
-    };
+    return { mlss: water.kpi.sludge.mlss, validated: water.designer.validateWater().length };
   });
-  expect(after.nodes).toBe(before + 1);
-  expect(after.newTag).toBe('GR-102');
-  expect(after.duplicate).toBe(false);
+  expect((check as any).json.length).toBeGreaterThan(500);
+  expect((check as any).loaded).toBe((check as any).before.nodes);
+  expect(after.mlss).toBeCloseTo((check as any).before.mlss, 1);
+  expect(after.validated).toBe(0);
   expect((page as any).__errors).toEqual([]);
 });

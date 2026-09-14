@@ -3,267 +3,52 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ice-smart-water · 工艺流程图编辑器</title>
+    <title>ice-smart-water · 智慧水务运行控制台</title>
     <!-- 内联水滴图标：省一次 /favicon.ico 的 404（那会在控制台留一条 error，e2e 的"零报错"就废了） -->
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3c5.2 6.2 9 10.6 9 15a9 9 0 0 1-18 0c0-4.4 3.8-8.8 9-15z' fill='%230d6efd'/%3E%3C/svg%3E"
     />
     <style>
-      :root {
-        --sw-primary: #0d6efd;
-        --sw-border: #e2e8f0;
-        --sw-text: #0f172a;
-        --sw-muted: #64748b;
-        --sw-bg: #f8fafc;
-      }
-      * { box-sizing: border-box; }
-      html, body { height: 100%; }
       body {
         margin: 0;
-        display: flex;
-        flex-direction: column;
-        font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-        background: var(--sw-bg);
-        color: var(--sw-text);
+        padding: 24px;
+        font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        background: #eef1f4;
+        color: #212529;
       }
-
-      /* ---------- 顶栏 ---------- */
-      .app-header {
-        flex: none;
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 8px 10px;
-        padding: 8px 14px;
-        background: #fff;
-        border-bottom: 1px solid var(--sw-border);
+      /* 整页画布：外壳（侧栏 / 顶栏 / 卡片）全画在这一张上 */
+      canvas#canvas-shell {
+        display: block;
+        border-radius: 14px;
+        background: #ffffff;
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
       }
-      .app-brand { display: flex; align-items: baseline; gap: 8px; margin-right: 6px; }
-      .app-brand__name { font-size: 15px; font-weight: 700; color: var(--sw-primary); }
-      .app-brand__desc { font-size: 12px; color: var(--sw-muted); }
-      .nav { display: flex; gap: 6px; }
-      .nav a {
-        padding: 5px 10px;
-        border-radius: 8px;
-        text-decoration: none;
-        color: var(--sw-text);
-        border: 1px solid var(--sw-border);
+      /* 岛：需要独立 ICE 实例的画布区域（工艺图 / 24 小时看板 / 符号图例），
+         由脚本按外壳坐标绝对定位，嵌在卡片挖好的"洞"里 */
+      .app {
+        /* display:block：inline-block 会在行盒里留出基线间隙，让页面多出 6px 纵向滚动条 */
+        display: block;
+        position: relative;
+        width: fit-content;
       }
-      .nav a.is-active { background: var(--sw-primary); border-color: var(--sw-primary); color: #fff; }
-      .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
-      .toolbar__sep { width: 1px; height: 20px; background: var(--sw-border); }
-      button, select, input {
-        padding: 5px 9px;
-        border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        background: #fff;
-        font: inherit;
-        color: inherit;
-      }
-      button:hover { border-color: var(--sw-primary); color: var(--sw-primary); }
-      button.primary { background: var(--sw-primary); border-color: var(--sw-primary); color: #fff; }
-      button.primary:hover { background: #0b5ed7; color: #fff; }
-
-      /* ---------- 主区 ---------- */
-      .app-main {
-        flex: 1 1 auto;
-        display: grid;
-        grid-template-columns: 1fr 420px;
-        min-height: 0;
-      }
-      .stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-      .stage__canvas { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
-      .stage__canvas canvas { display: block; }
-      .stage__hint {
+      .island {
         position: absolute;
-        left: 12px;
-        bottom: 10px;
-        padding: 4px 10px;
-        border-radius: 999px;
-        background: rgba(15, 23, 42, 0.72);
-        color: #fff;
-        font-size: 11px;
-        pointer-events: none;
+        overflow: hidden;
+        border-radius: 10px;
       }
-
-      /* ---------- 底部看板 ---------- */
-      .board { flex: none; height: 246px; border-top: 1px solid var(--sw-border); background: #fff; display: flex; flex-direction: column; }
-      .board__head {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 6px 12px 0;
-        font-size: 12px;
-        color: var(--sw-muted);
+      .island canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
       }
-      .board__body { flex: 1 1 auto; min-height: 0; padding: 4px 8px 8px; }
-      .board__body canvas { display: block; width: 100%; height: 100%; }
-
-      /* ---------- 侧栏 ---------- */
-      .side {
-        border-left: 1px solid var(--sw-border);
-        background: #fff;
-        overflow: auto;
-        padding: 10px 12px 20px;
-      }
-      .panel { margin-bottom: 14px; }
-      .panel__title {
-        margin: 0 0 6px;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        color: var(--sw-muted);
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .panel__title::before {
-        content: '';
-        width: 3px;
-        height: 12px;
-        border-radius: 2px;
-        background: var(--sw-primary);
-      }
-      .hint { color: var(--sw-muted); font-size: 12px; }
-
-      /* 属性面板 */
-      .property-panel__row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-      .property-panel__label { flex: none; width: 56px; color: var(--sw-muted); font-size: 12px; }
-      .property-panel__input { flex: 1 1 auto; min-width: 0; }
-      .property-panel__input--check { flex: none; }
-      .property-panel__static { font-size: 12px; }
-
-      /* 指标列表 */
-      .metric-list { margin: 0; display: grid; grid-template-columns: 92px 1fr; gap: 4px 8px; }
-      .metric__label { color: var(--sw-muted); font-size: 12px; }
-      .metric__value { margin: 0; display: flex; align-items: baseline; gap: 6px; }
-      .metric__number { font-weight: 600; }
-      .metric__hint { font-size: 11px; color: var(--sw-muted); }
-      .metric__value--ok .metric__number { color: #15803d; }
-      .metric__value--warning .metric__number { color: #b45309; }
-      .metric__value--error .metric__number { color: #b91c1c; }
-
-      /* 表格 */
-      .load-table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
-      .load-table th {
-        text-align: left;
-        font-weight: 600;
-        color: var(--sw-muted);
-        border-bottom: 1px solid var(--sw-border);
-        padding: 3px 4px;
-        white-space: nowrap;
-      }
-      .load-table td { padding: 3px 4px; border-bottom: 1px dashed #f1f5f9; white-space: nowrap; }
-      .load-table th:first-child, .load-table td:first-child { width: 46%; }
-      .load-table__tag { color: var(--sw-muted); margin-right: 5px; }
-      .load-table__row--idle { color: #94a3b8; text-decoration: line-through; }
-      .load-table__row--error td { color: #b91c1c; }
-      .load-table__total { margin-top: 6px; font-size: 11px; color: var(--sw-muted); }
-
-      /* 问题清单 */
-      .issue-list { display: flex; flex-direction: column; gap: 4px; }
-      .issue { display: flex; gap: 6px; font-size: 12px; line-height: 1.5; }
-      .issue--error { color: #b91c1c; }
-      .issue--warning { color: #b45309; }
-      .issue--ok { color: #15803d; }
-      .issue__icon { flex: none; }
-
-      /* ---------- 状态栏 ---------- */
-      .statusbar {
-        flex: none;
-        padding: 5px 14px;
-        font-size: 12px;
-        border-top: 1px solid var(--sw-border);
-        background: #fff;
-        color: var(--sw-muted);
-      }
-      .statusbar--ok { color: #15803d; }
-      .statusbar--warning { color: #b45309; }
-      .statusbar--error { color: #b91c1c; }
     </style>
   </head>
   <body>
-    <header class="app-header">
-      <div class="app-brand">
-        <span class="app-brand__name">ice-smart-water</span>
-        <span class="app-brand__desc">示范厂 10 万 m³/d · AAO + 混凝沉淀 + 滤布滤池 + 消毒</span>
-      </div>
-      <nav class="nav">
-        <a class="is-active" href="./water-editor.html">工艺流程图编辑器</a>
-        <a href="./water-symbols.html">符号库</a>
-      </nav>
-      <div class="toolbar">
-        <select id="in-kind" title="新增符号类型"></select>
-        <button id="btn-add">新增符号</button>
-        <button id="btn-delete">删除选中</button>
-        <button id="btn-undo">撤销</button>
-        <button id="btn-redo">重做</button>
-        <span class="toolbar__sep"></span>
-        <select id="in-medium" title="管线介质"></select>
-        <button id="btn-pipe">画管线</button>
-        <button id="btn-valve">阀门开 / 闭</button>
-        <button id="btn-reload" class="primary">重载案例</button>
-        <span class="toolbar__sep"></span>
-        <button id="btn-trace">流径分析</button>
-        <button id="btn-validate">图纸校验</button>
-        <button id="btn-fit">适应视图</button>
-        <button id="btn-reset">复位视图</button>
-        <span class="toolbar__sep"></span>
-        <button id="btn-export-svg">导出 SVG</button>
-        <button id="btn-export-json">导出 JSON</button>
-        <button id="btn-import-json">导入 JSON</button>
-      </div>
-    </header>
-
-    <main class="app-main">
-      <section class="stage">
-        <div class="stage__canvas">
-          <canvas id="canvas-process"></canvas>
-          <div class="stage__hint">滚轮缩放 · 空白处或中键拖拽平移 · 点选符号后可改名称与位号</div>
-        </div>
-        <div class="board">
-          <div class="board__head">
-            <strong>运行看板</strong>
-            <span id="board-caption">24 小时进出水趋势（双击图例可只看某条曲线）</span>
-          </div>
-          <div class="board__body"><canvas id="canvas-board"></canvas></div>
-        </div>
-      </section>
-
-      <aside class="side">
-        <div class="panel">
-          <h3 class="panel__title">运行控制台</h3>
-          <canvas id="canvas-console"></canvas>
-        </div>
-        <div class="panel">
-          <h3 class="panel__title">属性</h3>
-          <div id="property-panel" class="hint">点击画布上的符号或管线进行编辑</div>
-        </div>
-        <div class="panel">
-          <h3 class="panel__title">运行指标</h3>
-          <div id="metric-list"></div>
-        </div>
-        <div class="panel">
-          <h3 class="panel__title">出水达标对照</h3>
-          <div id="compliance-table"></div>
-        </div>
-        <div class="panel">
-          <h3 class="panel__title">图纸校验（设计器提供）</h3>
-          <div id="validate-output" class="hint">点击「图纸校验」运行</div>
-        </div>
-        <div class="panel">
-          <h3 class="panel__title">运行审计（本应用）</h3>
-          <div id="audit-output" class="hint">切换工况后自动重算</div>
-        </div>
-        <div class="panel">
-          <h3 class="panel__title">沿程水量与负荷</h3>
-          <div id="load-table"></div>
-        </div>
-      </aside>
-    </main>
-
-    <footer class="statusbar" id="statusbar">正在载入案例…</footer>
+    <div class="app">
+      <canvas id="canvas-shell"></canvas>
+      <div class="island" id="island-process"><canvas id="canvas-process"></canvas></div>
+      <div class="island" id="island-board"><canvas id="canvas-board"></canvas></div>
+    </div>
   </body>
 </html>
