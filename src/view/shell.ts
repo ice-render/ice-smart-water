@@ -111,6 +111,8 @@ export type PageContext = {
 
 export type ShellHandle = {
   ice: any;
+  /** 顶部消息所在的引擎实例（有覆盖画布时是独立实例，否则与 `ice` 相同） */
+  messageIce: any;
   theme: any;
   layout: ShellLayout;
   /** 当前页 key */
@@ -145,6 +147,15 @@ export type ShellHandle = {
 
 export type ShellOptions = {
   canvas: HTMLCanvasElement;
+  /**
+   * 顶部消息（`toast`）专用的「覆盖画布」。
+   *
+   * 外壳画布在 DOM 里位于各「岛」画布**之下**，画在外壳工具层上的消息只要堆进岛的区域
+   * 就会被岛盖住（ICE 的 zIndex 管不了 DOM 层叠）。传一张在所有岛之上、`pointer-events:none`
+   * 的覆盖画布，外壳就会为它单独起一个引擎实例专门画顶部消息。
+   * 不传则退回画在外壳画布上（单画布场景的旧行为）。
+   */
+  messageOverlay?: HTMLCanvasElement;
   brand: string;
   brandSub: string;
   menu: ShellMenuItem[];
@@ -216,6 +227,19 @@ export function mountShell(options: ShellOptions): ShellHandle {
   canvas.style.height = `${measured.height}px`;
 
   const ice = new ICE().init(canvas, { renderMode: 'dirty-rect' });
+
+  // 顶部消息画到「覆盖画布」（若有）：外壳画布在 DOM 里位于各「岛」之下，画在外壳工具层上的
+  // 消息一旦堆进岛的区域就会被岛盖住。覆盖画布在所有岛之上、尺寸与外壳画布一致（坐标才能对齐）。
+  let messageIce: any = ice;
+  if (options.messageOverlay) {
+    const overlay = options.messageOverlay;
+    overlay.width = measured.width;
+    overlay.height = measured.height;
+    overlay.style.width = `${measured.width}px`;
+    overlay.style.height = `${measured.height}px`;
+    messageIce = new ICE().init(overlay, { renderMode: 'dirty-rect' });
+  }
+
   const theme = iceUIManager.getTheme();
   const layout = computeLayout(measured.width, measured.height);
   const { content, inner } = layout;
@@ -488,7 +512,8 @@ export function mountShell(options: ShellOptions): ShellHandle {
   }
 
   function toast(text: string, type = 'success'): void {
-    ICEMessage.show(ice, text, { type: type as any });
+    // 走「覆盖画布」的实例：顶部消息必须在所有岛之上，否则堆进工艺图区域会被盖住（见 messageOverlay）
+    ICEMessage.show(messageIce, text, { type: type as any });
   }
   function notify(title: string, description: string, type = 'success'): void {
     ICENotification.open(ice, { title, description, type: type as any });
@@ -518,6 +543,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
 
   return {
     ice,
+    messageIce,
     theme,
     layout,
     current: () => currentKey,
@@ -530,6 +556,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     islandRect: (id: string) => isles[id] || null,
     find: (id: string) => findWidget(ice, id),
     destroy(): void {
+      if (messageIce !== ice && typeof messageIce.destroy === 'function') messageIce.destroy();
       if (typeof ice.destroy === 'function') ice.destroy();
     },
   };

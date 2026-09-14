@@ -631,6 +631,8 @@ function handleLegendAction(key: string): void {
 
 const shell = mountShell({
   canvas: need<HTMLCanvasElement>('canvas-shell'),
+  // 顶部消息画到覆盖画布上（在所有「岛」之上），否则堆进工艺图区域会被岛画布盖住
+  messageOverlay: need<HTMLCanvasElement>('canvas-overlay'),
   brand: 'ice-smart-water',
   brandSub: '示范厂 10 万 m³/d · AAO + 混凝沉淀 + 滤布滤池 + 消毒 · 执行 GB 18918-2002 一级 A',
   footer: { avatar: 'SW', name: '示范厂 WWTP-100K', role: '智慧水务运行控制台' },

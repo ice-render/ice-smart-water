@@ -156,11 +156,13 @@ test('整个系统只有一个 HTML：登录门之后是同一个壳，符号库
   expect(entered.total).toBe(31);
   expect(entered.page).toBe('process');
   expect(entered.under).toBe('canvas-process');
-  // 一张外壳画布 + 一张登录层 + 七个岛画布，全部在同一个 HTML 里
+  // 一张外壳画布 + 一张登录层 + 一张消息覆盖画布（在岛之上，顶部消息不被岛盖住）+ 七个岛画布，
+  // 全部在同一个 HTML 里
   expect(entered.canvases.sort()).toEqual(
     [
       'canvas-shell',
       'canvas-login',
+      'canvas-overlay',
       'canvas-process',
       'canvas-board',
       'canvas-legend',

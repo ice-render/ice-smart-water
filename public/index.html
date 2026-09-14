@@ -35,6 +35,18 @@
         background: #ffffff;
         box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
       }
+      /* 消息覆盖画布：位于所有「岛」画布之上、登录层之下。
+         外壳画布在 DOM 里位于岛之下，画在外壳上的顶部消息堆进岛的区域会被岛盖住；
+         这张画布专门画消息，pointer-events:none（顶部消息无需交互，也不挡外壳/岛的点击）。 */
+      canvas#canvas-overlay {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 15;
+        display: block;
+        border-radius: 14px;
+        pointer-events: none;
+      }
       .app {
         /* display:block：inline-block 会在行盒里留出基线间隙，让页面多出几像素纵向滚动条 */
         display: block;
@@ -66,6 +78,8 @@
       <div class="island" id="island-live-gauge"><canvas id="canvas-live-gauge"></canvas></div>
       <div class="island" id="island-live-heat"><canvas id="canvas-live-heat"></canvas></div>
       <div class="island" id="island-calc-curve"><canvas id="canvas-calc-curve"></canvas></div>
+      <!-- 顶部消息专用的覆盖画布：在所有岛之上（见上面的 CSS） -->
+      <canvas id="canvas-overlay"></canvas>
     </div>
   </body>
 </html>
