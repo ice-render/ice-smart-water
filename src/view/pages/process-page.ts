@@ -316,6 +316,15 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
       { key: 'json', label: '导出 JSON', onClick: () => deps.onAction('export-json') },
       { key: 'reload', label: '重载案例', variant: 'primary', onClick: () => deps.onAction('reload') },
     ],
+    // 本页关心的状态：当前工况 + 流径通不通
+    statusTags: () => {
+      const { mode, trace, idleCount } = deps.snapshot();
+      return [
+        { text: mode.label, status: mode.id === 'maintenance' ? 'warning' : 'primary', width: 92 },
+        { text: trace.connected ? '流径通畅' : '断流', status: trace.connected ? 'success' : 'error', width: 84 },
+        idleCount ? { text: `停运 ${idleCount} 台`, status: 'warning', width: 84 } : null,
+      ].filter(Boolean) as Array<{ text: string; status: string; width?: number }>;
+    },
     refresh,
   };
 }

@@ -211,6 +211,19 @@ export function buildDataPage(ctx: PageContext, deps: DataPageDeps): PageHandle 
     node: page,
     islands: [{ id: 'board', rect: boardIslandRect(layout) }],
     actions: [],
+    // 本页关心的状态：当前工况 + 审计结论
+    statusTags: () => {
+      const snapshot = deps.snapshot();
+      const errors = snapshot.issues.filter((issue) => issue.level === 'error').length;
+      return [
+        { text: snapshot.modeLabel, status: snapshot.modeLabel === '检修停运' ? 'warning' : 'primary', width: 92 },
+        {
+          text: errors ? `${errors} 项超标` : snapshot.issues.length ? `${snapshot.issues.length} 项关注` : '全部达标',
+          status: errors ? 'error' : snapshot.issues.length ? 'warning' : 'success',
+          width: 96,
+        },
+      ];
+    },
     refresh,
   };
 }

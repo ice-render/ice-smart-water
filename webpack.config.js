@@ -25,10 +25,12 @@ module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
 
   return {
-    // 两个主入口：工艺流程图编辑器 / 符号库
+    /**
+     * **单入口**：整个系统只有一个 HTML（`index.html`），所有功能都在这张画布外壳里 ——
+     * 工艺流程图 / 运行数据 / 符号库是壳里的三个页签，不是三个页面。
+     */
     entry: {
-      'water-editor': path.resolve(__dirname, 'src/entries/water-editor.ts'),
-      'water-symbols': path.resolve(__dirname, 'src/entries/water-symbols.ts'),
+      app: path.resolve(__dirname, 'src/entries/app.ts'),
     },
     output: {
       path: path.resolve(__dirname, 'dist'),
@@ -56,14 +58,9 @@ module.exports = (env, argv) => {
     },
     plugins: [
       new HtmlWebpackPlugin({
-        template: path.resolve(__dirname, 'public/water-editor.html'),
-        filename: 'water-editor.html',
-        chunks: ['water-editor'],
-      }),
-      new HtmlWebpackPlugin({
-        template: path.resolve(__dirname, 'public/water-symbols.html'),
-        filename: 'water-symbols.html',
-        chunks: ['water-symbols'],
+        template: path.resolve(__dirname, 'public/index.html'),
+        filename: 'index.html',
+        chunks: ['app'],
       }),
     ],
     // 打包进来的是四个库（引擎 + 图表 + 控件 + 设计器），体积天然大，别刷警告

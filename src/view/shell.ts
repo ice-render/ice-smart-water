@@ -81,6 +81,8 @@ export type ShellLayout = {
   rightWidth: number;
 };
 
+export type StatusTagSpec = { text: string; status: string; width?: number };
+
 export type ShellPage = {
   key: string;
   label: string;
@@ -91,6 +93,11 @@ export type PageHandle = {
   node: any;
   islands?: IslandSpec[];
   actions?: HeaderActionSpec[];
+  /**
+   * 顶栏状态标签**由页面自己声明**（每页关心的东西不一样：工艺图页关心工况与流径，
+   * 符号库页关心符号数量）。切页与 `refresh()` 时外壳会重新取一次。
+   */
+  statusTags?: () => StatusTagSpec[];
   refresh?: () => void;
 };
 
@@ -112,7 +119,12 @@ export type ShellHandle = {
   show: (key: string) => void;
   /** 重排当前页（动态文案改完用它；岛的位置会一并跟着走） */
   refresh: () => void;
-  /** 顶栏两个状态标签：工况 / 运行状态 */
+  /**
+   * 手动设置顶栏状态标签。
+   *
+   * **一般不用调**：页面在 `PageHandle.statusTags` 里声明自己的标签，切页与 `refresh()` 时
+   * 外壳会自己取。这个入口留给"外壳外的状态"（比如全局连接状态）用。
+   */
   setStatusTags: (tags: Array<{ text: string; status: string; width?: number }>) => void;
   /** 换侧栏底部的登录用户（登录 / 退出登录时用） */
   setUser: (user: { avatar?: string; name: string; role?: string }) => void;
@@ -328,6 +340,8 @@ export function mountShell(options: ShellOptions): ShellHandle {
   /** 顶栏右侧：状态标签 + 页级操作按钮（切页时重建） */
   let tagNodes: any[] = [];
   let actionNodes: any[] = [];
+  /** 上一次画出来的标签签名：一样就不重建（每次 refresh 都重建会闪） */
+  let tagSignature = '';
 
   function clearNodes(nodes: any[], host: any): void {
     nodes.forEach((node) => {
@@ -380,7 +394,10 @@ export function mountShell(options: ShellOptions): ShellHandle {
     ice.dirty = true;
   }
 
-  function setStatusTags(tags: Array<{ text: string; status: string; width?: number }>): void {
+  function setStatusTags(tags: StatusTagSpec[]): void {
+    const signature = tags.map((tag) => `${tag.text}|${tag.status}|${tag.width || ''}`).join('~');
+    if (signature === tagSignature) return;
+    tagSignature = signature;
     clearNodes(tagNodes, header);
     // ICETag 的状态色在构造期定死，所以状态变了要重建（只 setText 不会变色）
     tagNodes = tags.map((tag, index) => {
@@ -442,14 +459,21 @@ export function mountShell(options: ShellOptions): ShellHandle {
     breadcrumb.setItems([{ label: '首页' }, { label: page.label }]);
     menu.setSelectedKey(key);
     setActions((currentHandle && currentHandle.actions) || []);
+    applyPageTags();
     collectIslands();
     if (options.onIslands) options.onIslands(Object.keys(isles).map((id) => ({ id, rect: isles[id] })));
     ice.dirty = true;
   }
 
+  /** 取当前页声明的状态标签（页面没声明就清空） */
+  function applyPageTags(): void {
+    setStatusTags(currentHandle && currentHandle.statusTags ? currentHandle.statusTags() : []);
+  }
+
   function refresh(): void {
     // 先重排页面内容，再让岛对齐卡片（岛的洞是按卡片矩形算的，卡片动了洞就动）
     if (currentHandle && typeof currentHandle.refresh === 'function') currentHandle.refresh();
+    applyPageTags();
     ice.dirty = true;
   }
 

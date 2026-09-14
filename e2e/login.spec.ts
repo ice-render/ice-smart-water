@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('首屏停在登录页：盖住应用，应用控件点不到', async ({ page }) => {
-  await page.goto('/water-editor.html');
+  await page.goto('/');
   await page.waitForFunction(() => !!(window as any).__login);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => (window as any).__login.visible())).toBe(true);
@@ -43,7 +43,7 @@ test('首屏停在登录页：盖住应用，应用控件点不到', async ({ pa
 });
 
 test('用户名空着点登录：停在登录页并给出提示；一开始输入提示就撤掉', async ({ page }) => {
-  await page.goto('/water-editor.html');
+  await page.goto('/');
   await page.waitForFunction(() => !!(window as any).__login);
   await page.waitForTimeout(500);
 
@@ -61,7 +61,7 @@ test('用户名空着点登录：停在登录页并给出提示；一开始输�
 });
 
 test('输入任意内容 → 进入应用，用户名带到侧栏署名；退出登录能回到登录页', async ({ page }) => {
-  await page.goto('/water-editor.html');
+  await page.goto('/');
   await page.waitForFunction(() => !!(window as any).__login);
   await page.waitForTimeout(500);
 
@@ -108,7 +108,7 @@ test('输入任意内容 → 进入应用，用户名带到侧栏署名；退出
 });
 
 test('登录态存 sessionStorage：同一标签页刷新不用重登', async ({ page }) => {
-  await page.goto('/water-editor.html');
+  await page.goto('/');
   await page.waitForFunction(() => !!(window as any).__login);
   await page.waitForTimeout(400);
   await login(page, { name: '刷新人' });
@@ -137,21 +137,40 @@ test('登录态存 sessionStorage：同一标签页刷新不用重登', async ({
   expect((page as any).__errors).toEqual([]);
 });
 
-test('符号库页也有登录门', async ({ page }) => {
-  await page.goto('/water-symbols.html');
+test('整个系统只有一个 HTML：登录门之后是同一个壳，符号库是壳里的页签', async ({ page }) => {
+  await page.goto('/');
   await page.waitForFunction(() => !!(window as any).__login);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => (window as any).__login.visible())).toBe(true);
   await expectLoginCovers(page);
 
   await login(page, { name: '符号员' });
-  const state = await page.evaluate(() => ({
+  const entered = await page.evaluate(() => ({
     loginVisible: (window as any).__login.visible(),
-    total: (window as any).__symbols.total,
+    total: (window as any).__water.symbolTotal,
+    page: (window as any).__water.shell.current(),
     under: document.elementFromPoint(700, 300).id,
+    canvases: Array.from(document.querySelectorAll('canvas')).map((c) => c.id),
   }));
-  expect(state.loginVisible).toBe(false);
-  expect(state.total).toBe(21);
-  expect(state.under).toBe('canvas-legend');
+  expect(entered.loginVisible).toBe(false);
+  expect(entered.total).toBe(21);
+  expect(entered.page).toBe('process');
+  expect(entered.under).toBe('canvas-process');
+  // 一张外壳画布 + 一张登录层 + 三个岛画布，全部在同一个 HTML 里
+  expect(entered.canvases.sort()).toEqual(
+    ['canvas-board', 'canvas-legend', 'canvas-login', 'canvas-process', 'canvas-shell'].sort()
+  );
+
+  // 切到符号库页签，图例岛接管那块区域
+  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('legend')");
+  await page.waitForTimeout(400);
+  const legend = await page.evaluate(() => ({
+    page: (window as any).__water.shell.current(),
+    under: document.elementFromPoint(700, 300).id,
+    cells: (window as any).__water.legend.getLayout().cells.length,
+  }));
+  expect(legend.page).toBe('legend');
+  expect(legend.under).toBe('canvas-legend');
+  expect(legend.cells).toBe(21);
   expect((page as any).__errors).toEqual([]);
 });

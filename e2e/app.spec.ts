@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
   page.on('pageerror', (err) => errors.push(String(err)));
-  await page.goto('/water-editor.html');
+  await page.goto('/');
   await page.waitForFunction(() => !!(window as any).__water);
   await page.waitForTimeout(400);
   // 每个用例都是新上下文：sessionStorage 空的，所以先过登录门（走真实输入路径）
@@ -74,10 +74,13 @@ test('岛：工艺图挖在「工艺流程」卡片的正文区里，且真的�
   expect(card.left + card.width).toBeLessThanOrEqual(content.left + content.width);
   expect(card.top + card.height).toBeLessThanOrEqual(content.top + content.height);
 
-  const boardHidden = await page.evaluate(
-    () => (document.querySelector('#island-board') as HTMLElement).style.display === 'none'
+  // 另两个岛不在本页，必须藏起来（单页三岛：藏不好就会"飘"在别的页签上）
+  const othersHidden = await page.evaluate(() =>
+    ['island-board', 'island-legend'].map(
+      (id) => (document.getElementById(id) as HTMLElement).style.display === 'none'
+    )
   );
-  expect(boardHidden).toBe(true); // 看板不在本页，必须藏起来
+  expect(othersHidden).toEqual([true, true]);
 
   const ink = await canvasStats(page, '#canvas-process');
   expect(ink.colors).toBeGreaterThan(60);

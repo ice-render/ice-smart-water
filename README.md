@@ -6,16 +6,20 @@
 而是把家族四件套按同一个业务场景（一座 10 万 m³/d 的 AAO 市政污水厂）拼起来，
 只写"水务这门生意"的逻辑。看这一页能知道家族各件东西**怎么组合、边界在哪里**。
 
-## 两个主入口
+## 一个入口、三个页签
 
-| 入口 | 页面 | 是什么 |
+整个系统**只有一个 HTML**（`index.html`）：所有功能都在同一张画布外壳里，
+工艺流程图 / 运行数据 / 符号库是壳里的三个页签（`display` 切换，不重新加载页面），
+切页时只把对应的"岛"摆出来。进应用先过**登录门**（见下）。
+
+| 页签 | 是什么 | 页里的岛 |
 |---|---|---|
-| **工艺流程图编辑器** | `water-editor.html` | 全流程编辑器（编辑 + 工艺校验 + 流径分析 + 运行工况 + 实时指标 + 24 小时看板） |
-| **符号库** | `water-symbols.html` | 21 种给排水符号的图例，带业务语义（作用 / 设计关注 / 巡检要点）与分类筛选 |
+| **工艺流程图** | 全流程编辑器：P&ID 编辑 + 图纸校验 + 流径分析 + 实时指标（5 张统计卡） | 工艺图（设计器） |
+| **运行数据** | 24 小时进出水趋势 + 沿程水量与负荷 + 出水达标对照 + 运行审计 | 24 小时看板（`ice-chart`） |
+| **符号库** | 21 种给排水符号的图例 + 业务语义（作用 / 设计关注 / 巡检要点）+ 分类筛选 | 符号图例（设计器） |
 
-两个页面顶部互相跳转，进页面先过**登录门**（见下）。前者由 `ice-entity-designer` 的
-`examples/water-editor.html` 迁移而来，后者对应 `examples/water-symbols.html`；
-迁移后不再是一段写在 HTML 里的脚本，而是真正的工程。
+内容由 `ice-entity-designer` 的两个示例（`examples/water-editor.html` / `water-symbols.html`）
+迁移而来，但迁移后不再是两段写在 HTML 里的脚本，而是**一个工程里的三个页签**。
 
 ## 登录门
 
@@ -100,7 +104,7 @@ npm start            # webpack dev server，http://localhost:8092
 ```
 
 ```bash
-npm run build        # 产出 dist/water-editor.html + dist/water-symbols.html
+npm run build        # 产出 dist/index.html（单入口）+ dist/app.[hash].js
 npm run serve        # 静态服务 dist（端口 8092）
 ```
 
@@ -119,7 +123,7 @@ npm run verify       # types:check + test + build
 ## 目录
 
 ```
-public/            两个入口页的 HTML 模板（一个外壳画布 + 若干岛容器；脚本由 webpack 注入）
+public/            唯一入口页的 HTML 模板（一张外壳画布 + 登录层画布 + 三个岛容器；脚本由 webpack 注入）
 src/
   domain/          业务逻辑（纯函数、可单测，唯一允许 import 的是兄弟包的类型）
     water-quality.ts    水质指标 / GB 18918-2002 一级 A 限值 / 达标判定与裕度
@@ -139,7 +143,7 @@ src/
     board.ts            图表装配 + option 构造（ice-chart）
     symbol-legend.ts    符号图例的版面计算（纯函数）与渲染
     pages/              三个页面：process（工艺图）/ data（运行数据）/ legend（符号库）
-  entries/         两个主入口（只做装配与状态编排，不写业务规则）
+  entries/app.ts   唯一入口（只做装配与状态编排，不写业务规则）
 tests/domain/      jest 单测（镜像 domain 结构）
 e2e/               Playwright 端到端 + 画布断言工具（按坐标点控件、按像素验绘制）
 ```

@@ -3,8 +3,11 @@ import { defineConfig } from '@playwright/test';
 /**
  * ice-smart-water 端到端回归。
  *
- * 覆盖两个主入口：`dist/water-editor.html`（工艺流程图编辑器 + 运行控制台 + 运行看板）
- * 与 `dist/water-symbols.html`（符号库图例 + 分类详情）。
+ * 只有一个页面：`dist/index.html`（单入口的整页画布外壳）。
+ * 三个页签（工艺流程图 / 运行数据 / 符号库）与登录门都在同一个 HTML 里：
+ * - `e2e/login.spec.ts`    登录门
+ * - `e2e/app.spec.ts`      外壳、工艺图岛、运行数据页与看板岛
+ * - `e2e/symbols-page.spec.ts` 符号库页签与图例岛
  *
  * 前置：`npm run build`（页面吃的是打包产物，不是 src）
  * 运行：`npm run test:e2e`

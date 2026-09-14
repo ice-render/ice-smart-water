@@ -6,11 +6,13 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 四件套按同一个业务（10 万 m³/d AAO 市政污水厂）拼成一个能用的应用。
 **本仓只写水务业务**，渲染、图表、控件、领域设计器一律取自家族。
 
-版面是**整页画布化的 admin console**（对齐 `ice-web-components/examples/admin.html`）：
-侧栏 `ICEMenu` + 顶栏 + 卡片栅格全画在一张外壳画布上；只有工艺图与 24h 看板是"岛"（独立画布）。
-进页面先过**登录门**（`view/login.ts`，覆盖在应用之上的一层画布，不校验账号，输入任意内容即可）。
+**整个系统只有一个 HTML**（`index.html`）：版面是**整页画布化的 admin console**
+（对齐 `ice-web-components/examples/admin.html`）—— 侧栏 `ICEMenu` + 顶栏 + 卡片栅格
+全画在一张外壳画布上；工艺流程图 / 运行数据 / 符号库是**壳里的三个页签**（`display` 切换）。
+只有工艺图、24h 看板、符号图例是"岛"（各自独立画布 + 独立 `ICE` 实例）。
+再外面盖一层**登录门**（`view/login.ts`，不透明覆盖画布，不校验账号，输入任意内容即可）。
 
-两个主入口：`src/entries/water-editor.ts`（工艺流程图 + 运行数据）、`src/entries/water-symbols.ts`（符号库）。
+唯一入口：`src/entries/app.ts`。
 
 ## 分支与推送（家族铁律，2026-09-10 确立）
 
@@ -43,6 +45,11 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 6. **覆盖层（登录门）也是一个独立 ICE 实例**：不透明整页画布、`z-index` 高于岛，
    登录成功整层 `display:none` 让应用露出来。所以应用可以**先建好再被盖住**，
    不需要"登录后才初始化"那套懒加载（少一堆时序坑）。退出登录时记得清 `sessionStorage`。
+7. **一切都在一个 HTML 里，页签靠 `display` 切换**：不要为了"多一个功能模块"再开一个 HTML ——
+   那样会多出整页初始化、跨页状态丢失（工况、筛选、编辑都带不过去）与重复加载四件套。
+   新功能＝壳里加一个页签 + 按需在 `PageHandle` 里声明 `islands` / `actions` / `statusTags`。
+8. **`__water` 这类调试句柄只建一次，业务字段用 getter**：在 `recompute()` 里反复重建它，
+   会互相覆盖成"上一帧的快照"（踩过）。
 
 ## 踩过的坑（改之前先看）
 

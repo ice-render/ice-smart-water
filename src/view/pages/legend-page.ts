@@ -34,6 +34,8 @@ export type LegendPageHandle = PageHandle & {
   setSelection: (entry: SymbolEntry | null, matched: number) => void;
   /** 当前筛选值 */
   filter: () => LegendFilter;
+  /** 从外部（侧栏菜单）改筛选：同步分段控件并重画详情 */
+  setFilter: (filter: LegendFilter, matched: number) => void;
 };
 
 const STAT_HEIGHT = 120;
@@ -234,6 +236,15 @@ export function buildLegendPage(
       { key: 'reset', label: '复位视图', onClick: () => deps.onAction('reset') },
       { key: 'svg', label: '导出 SVG', variant: 'primary', onClick: () => deps.onAction('export-svg') },
     ],
+    // 本页关心的状态：符号总数 + 当前筛选
+    statusTags: () => {
+      const total = categoryStats().reduce((sum, item) => sum + item.count, 0);
+      const current = currentFilter === 'all' ? '全部分类' : categoryMetaOf(currentFilter).label;
+      return [
+        { text: `共 ${total} 种符号`, status: 'primary', width: 108 },
+        { text: current, status: 'info', width: 108 },
+      ];
+    },
     refresh(): void {
       renderDetail(null, 0);
     },
@@ -242,6 +253,12 @@ export function buildLegendPage(
       ctx.ice.dirty = true;
     },
     filter: () => currentFilter,
+    setFilter(next: LegendFilter, matched: number): void {
+      currentFilter = next;
+      if (segmented.getValue() !== next) segmented.setValue(next);
+      renderDetail(null, matched);
+      ctx.ice.dirty = true;
+    },
   };
 }
 
