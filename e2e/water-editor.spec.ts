@@ -1,5 +1,14 @@
 import { expect, test } from '@playwright/test';
-import { canvasStats, clickSubmenu, clickWidget, expectViewportInteractions, islandRect, widgetWorldRect } from './helpers';
+import {
+  canvasStats,
+  clickSubmenu,
+  clickWidget,
+  expectLoginCovers,
+  expectViewportInteractions,
+  islandRect,
+  login,
+  widgetWorldRect,
+} from './helpers';
 
 /**
  * `water-editor.html` 的端到端回归。
@@ -18,7 +27,9 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (err) => errors.push(String(err)));
   await page.goto('/water-editor.html');
   await page.waitForFunction(() => !!(window as any).__water);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
+  // 每个用例都是新上下文：sessionStorage 空的，所以先过登录门（走真实输入路径）
+  await login(page, { name: '演示员 张三' });
 });
 
 test('装载：外壳铺满画布，工艺图 22 个单位 / 24 段管线，图纸校验与运行审计都干净', async ({ page }) => {

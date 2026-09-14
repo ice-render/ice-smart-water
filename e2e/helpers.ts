@@ -71,7 +71,11 @@ export async function canvasPoint(
     const el = document.elementFromPoint(payload.x, payload.y);
     return el ? el.id || el.tagName : null;
   }, point);
-  expect(under, `坐标 ${JSON.stringify(point)} 上应当是 ${selector}`).toBe(selector.replace('#', ''));
+  // 这里允许 INPUT/TEXTAREA：画布文本控件聚焦时会挂一个**原生输入替身**盖在自己身上
+  // （键盘输入走的是它），此时命中它的位置返回的是 INPUT 而不是画布本身。
+  const expected = selector.replace('#', '');
+  const acceptable = under === expected || under === 'INPUT' || under === 'TEXTAREA';
+  expect(acceptable, `${JSON.stringify(point)} 上应当是 ${selector}（或它的原生输入替身），实际是 ${under}`).toBe(true);
   // 必须真的把指针移过去：`page.mouse.wheel` 在**当前指针位置**派发，不先 move 就"缩放失灵"
   await page.mouse.move(point.x, point.y);
   return point;
@@ -179,6 +183,39 @@ export async function clickSubmenu(
   await clickWidget(page, '#canvas-shell', `${menuExpr}.getItemNode('${parentKey}')`);
   await page.waitForTimeout(320);
   await clickWidget(page, '#canvas-shell', `${menuExpr}.getItemNode('${childKey}')`);
+}
+
+/**
+ * 过登录门：**走真实交互路径**（点输入框 → 键盘打字 → 点「登 录」）。
+ *
+ * 输入是画布控件 `ICETextField`，它聚焦时会挂一个原生 `<input>` 替身接键盘输入，
+ * 所以这里必须"先点再打字"：直接 `setValue()` 会跳过整条输入链路，等于没验证登录框。
+ */
+export async function login(
+  page: Page,
+  options: { name?: string; password?: string; selector?: string } = {}
+): Promise<void> {
+  const selector = options.selector || '#canvas-login';
+  const name = options.name || '演示用户';
+  await page.waitForFunction(() => !!(window as any).__login);
+  await clickWidget(page, selector, "window.__login.find('login-username')");
+  await page.keyboard.type(name);
+  if (options.password) {
+    await clickWidget(page, selector, "window.__login.find('login-password')");
+    await page.keyboard.type(options.password);
+  }
+  await clickWidget(page, selector, "window.__login.find('login-submit')");
+  await page.waitForFunction(() => !(window as any).__login.visible());
+  await page.waitForTimeout(300);
+}
+
+/** 断言登录层真的盖住了应用（点上去应该落在登录画布上） */
+export async function expectLoginCovers(page: Page, x = 700, y = 300): Promise<void> {
+  const under = await page.evaluate((point) => {
+    const el = document.elementFromPoint(point.x, point.y);
+    return el ? el.id || el.tagName : null;
+  }, { x, y });
+  expect(under, '登录层应当盖在应用之上').toBe('canvas-login');
 }
 
 /** 三段式视口回归：滚轮缩放 → 中键拖拽平移 → 复位 */

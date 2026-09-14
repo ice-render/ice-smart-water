@@ -6,7 +6,11 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 四件套按同一个业务（10 万 m³/d AAO 市政污水厂）拼成一个能用的应用。
 **本仓只写水务业务**，渲染、图表、控件、领域设计器一律取自家族。
 
-两个主入口：`src/entries/water-editor.ts`（工艺流程图编辑器）、`src/entries/water-symbols.ts`（符号库）。
+版面是**整页画布化的 admin console**（对齐 `ice-web-components/examples/admin.html`）：
+侧栏 `ICEMenu` + 顶栏 + 卡片栅格全画在一张外壳画布上；只有工艺图与 24h 看板是"岛"（独立画布）。
+进页面先过**登录门**（`view/login.ts`，覆盖在应用之上的一层画布，不校验账号，输入任意内容即可）。
+
+两个主入口：`src/entries/water-editor.ts`（工艺流程图 + 运行数据）、`src/entries/water-symbols.ts`（符号库）。
 
 ## 分支与推送（家族铁律，2026-09-10 确立）
 
@@ -36,6 +40,9 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
    岛不在引擎显示树里，**必须自己管显隐**，否则切页后还"飘"在画面上。
    岛的画布尺寸依赖它的容器，所以**要先把岛摆到位，再 `new ICE().init()` / `createChart()`**；
    懒显示的岛（看板）第一次显示时要补一次 `resize()` + `refresh()`。
+6. **覆盖层（登录门）也是一个独立 ICE 实例**：不透明整页画布、`z-index` 高于岛，
+   登录成功整层 `display:none` 让应用露出来。所以应用可以**先建好再被盖住**，
+   不需要"登录后才初始化"那套懒加载（少一堆时序坑）。退出登录时记得清 `sessionStorage`。
 
 ## 踩过的坑（改之前先看）
 
@@ -59,6 +66,10 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
   横向滚动条。见 `measureCanvas()`。
 - **`ICELabel` + `style.wrap`** 才能换行；构造期的高度来自 DOM 兜底测量（长中文会偏大），
   所以"卡要留多高"用 `estimateTextHeight()` 估，别信构造期实测。
+- **画布文本控件聚焦时会挂一个原生 `<input>` 替身**盖在自己身上（键盘输入走它）：
+  - 断言"鼠标落在某个画布上"时要允许 `INPUT`/`TEXTAREA`，否则一聚焦就误判；
+  - e2e 想验真实输入就得"先点输入框再 `page.keyboard.type()`"，直接 `setValue()` 等于跳过整条链路；
+  - 读文字/数值用组件自己的 `getText()` / `getValue()`，别读 `state.text`（`ICEAvatar` 这类把文字放在内部 `textNode` 上）。
 - **业务规则要自洽**：改 `UNIT_REMOVAL` 之前先看 `plant-case.ts` 的注释 ——
   脱氮率受回流比上界约束、二沉池不接内回流，这两条错一个，全套数字跟着错。
 

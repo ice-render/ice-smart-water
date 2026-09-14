@@ -13,8 +13,20 @@
 | **工艺流程图编辑器** | `water-editor.html` | 全流程编辑器（编辑 + 工艺校验 + 流径分析 + 运行工况 + 实时指标 + 24 小时看板） |
 | **符号库** | `water-symbols.html` | 21 种给排水符号的图例，带业务语义（作用 / 设计关注 / 巡检要点）与分类筛选 |
 
-两个页面顶部互相跳转。前者由 `ice-entity-designer` 的 `examples/water-editor.html` 迁移而来，
-后者对应 `examples/water-symbols.html`；迁移后不再是一段写在 HTML 里的脚本，而是真正的工程。
+两个页面顶部互相跳转，进页面先过**登录门**（见下）。前者由 `ice-entity-designer` 的
+`examples/water-editor.html` 迁移而来，后者对应 `examples/water-symbols.html`；
+迁移后不再是一段写在 HTML 里的脚本，而是真正的工程。
+
+## 登录门
+
+首屏是一层**画布覆盖层**（`view/login.ts`），与外壳同一套设计语言：左侧品牌与介绍、
+右侧登录卡（`ICETextField` / `ICEPasswordField` / `ICEButton` / `ICEAlert`，都是画布原生控件）。
+
+- **不校验账号**：演示应用，用户名填任意内容即可进入（用户名必填、密码可留空）；
+- 输入的名字会带进应用：侧栏底部署名 + 头像首字母 + 一条欢迎提示；
+- 登录态存在 **`sessionStorage`**：同一标签页刷新不用重登；侧栏「退出登录」清掉它并回到登录门；
+- 输入框聚焦时组件会挂一个**原生 `<input>` 替身**接键盘输入 —— 输入法、选中、退格、Enter 提交
+  都是浏览器原生行为，不是自己实现的。
 
 ## 家族能力怎么用（本仓与四件套的边界）
 
@@ -121,6 +133,7 @@ src/
   view/            与家族打交道的一层
     adapter.ts          设计器 → 扁平图（引擎结构与业务结构之间唯一的接触点）
     shell.ts            画布化外壳：侧栏 ICEMenu / 顶栏 / 卡片栅格 / 页签切换 / 岛的回调
+    login.ts            登录门：画布覆盖层 + 表单 + sessionStorage 登录态
     islands.ts          岛的摆位与显隐（DOM 画布按外壳坐标嵌进卡片的洞）
     canvas-viewport.ts  岛的铺满容器 + 滚轮锚点缩放 + 拖拽平移
     board.ts            图表装配 + option 构造（ice-chart）

@@ -114,6 +114,8 @@ export type ShellHandle = {
   refresh: () => void;
   /** 顶栏两个状态标签：工况 / 运行状态 */
   setStatusTags: (tags: Array<{ text: string; status: string; width?: number }>) => void;
+  /** 换侧栏底部的登录用户（登录 / 退出登录时用） */
+  setUser: (user: { avatar?: string; name: string; role?: string }) => void;
   toast: (text: string, type?: string) => void;
   notify: (title: string, description: string, type?: string) => void;
   /** 岛的位置（岛画布由页面自己创建，这里只负责摆位置） */
@@ -239,24 +241,38 @@ export function mountShell(options: ShellOptions): ShellHandle {
   });
   const footerTop = layout.canvas.height - 96;
   const sidebarFooter: any[] = [];
+  let footerNodes: { avatar: any; name: any; role: any } | null = null;
   if (options.footer) {
-    sidebarFooter.push(
-      new ICESeparator({ left: 16, top: footerTop, width: 232, height: 1 }),
-      new ICEAvatar({ left: 16, top: footerTop + 20, text: options.footer.avatar, size: 40 }),
-      new ICELabel({
-        left: 64,
-        top: footerTop + 16,
-        text: options.footer.name,
-        style: { fontSize: 13, fontWeight: '600', fillStyle: theme.colors.text },
-      }),
-      new ICELabel({
-        left: 64,
-        top: footerTop + 36,
-        width: 184,
-        text: options.footer.role,
-        style: { fontSize: 11, wrap: true, lineHeight: 15, fillStyle: theme.colors.textSecondary },
-      })
-    );
+    const avatar = new ICEAvatar({ id: 'footer-avatar', left: 16, top: footerTop + 20, text: options.footer.avatar, size: 40 });
+    const name = new ICELabel({
+      id: 'footer-name',
+      left: 64,
+      top: footerTop + 16,
+      text: options.footer.name,
+      style: { fontSize: 13, fontWeight: '600', fillStyle: theme.colors.text },
+    });
+    const role = new ICELabel({
+      id: 'footer-role',
+      left: 64,
+      top: footerTop + 36,
+      width: 184,
+      text: options.footer.role,
+      style: { fontSize: 11, wrap: true, lineHeight: 15, fillStyle: theme.colors.textSecondary },
+    });
+    footerNodes = { avatar, name, role };
+    sidebarFooter.push(new ICESeparator({ left: 16, top: footerTop, width: 232, height: 1 }), avatar, name, role);
+  }
+
+  /**
+   * 换登录用户：只改文字，不重建节点（重建会把配色/字号这些一起丢掉）。
+   * 头像取名字的 1~2 个字符 —— 中文取前 1 个，英文取前 2 个首字母。
+   */
+  function setUser(user: { avatar?: string; name: string; role?: string }): void {
+    if (!footerNodes) return;
+    footerNodes.name.setText(user.name);
+    if (user.role !== undefined) footerNodes.role.setText(user.role);
+    footerNodes.avatar.setText(user.avatar || avatarTextOf(user.name));
+    ice.dirty = true;
   }
 
   const menu = new ICEMenu({
@@ -474,6 +490,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     show,
     refresh,
     setStatusTags,
+    setUser,
     toast,
     notify,
     islandRect: (id: string) => isles[id] || null,
@@ -494,6 +511,14 @@ export function findWidget(root: any, id: string): any {
     if (hit) return hit;
   }
   return null;
+}
+
+/** 头像文字：中文取第一个字，英文取前两个字母的大写 */
+export function avatarTextOf(name: string): string {
+  const text = String(name || '').trim();
+  if (!text) return 'SW';
+  if (/^[\x20-\x7e]+$/.test(text)) return text.slice(0, 2).toUpperCase();
+  return text.slice(0, 1);
 }
 
 /** 把整棵子树抬到指定 zIndex（同值不破坏内部父子顺序） */

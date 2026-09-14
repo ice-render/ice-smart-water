@@ -46,6 +46,8 @@ import {
 } from '../view/shell';
 import { mountIsland, placeIslands, type IslandHandle } from '../view/islands';
 import { installViewport } from '../view/canvas-viewport';
+import { clearLoginUser, mountLogin, readLoginUser, saveLoginUser } from '../view/login';
+import { avatarTextOf } from '../view/shell';
 import { dailyTrendOption, mountChart } from '../view/board';
 import { buildProcessPage, processIslandRect } from '../view/pages/process-page';
 import { boardIslandRect, buildDataPage } from '../view/pages/data-page';
@@ -322,6 +324,7 @@ const shell = mountShell({
       label: '重载示范案例',
       iconPath: 'M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15',
     },
+    { key: 'logout', label: '退出登录', iconPath: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9' },
   ],
   selectedKey: 'process',
   onMenuSelect: (key: string) => {
@@ -337,6 +340,10 @@ const shell = mountShell({
     }
     if (key === 'reload') {
       handleAction('reload');
+      return;
+    }
+    if (key === 'logout') {
+      logout();
       return;
     }
     shell.show(key);
@@ -377,6 +384,37 @@ const shell = mountShell({
 
 designer.subscribe(() => scheduleRecompute());
 
+/* ---------------- 登录门 ---------------- */
+
+const login = mountLogin({
+  canvas: need<HTMLCanvasElement>('canvas-login'),
+  size: layout.canvas,
+  onLogin: (user) => enterApp(user.name),
+});
+
+/** 进入应用：记住登录态、把用户带到侧栏署名上、揭开登录层 */
+function enterApp(name: string): void {
+  saveLoginUser({ name });
+  shell.setUser({ name, role: '示范厂 WWTP-100K · 已登录' });
+  login.hide();
+  // 岛在登录层下面，被盖着的时候已经建好了；这里只需按当前页把看板对齐一次
+  if (islands.board.visible()) {
+    requestAnimationFrame(() => {
+      board.resize();
+      board.refresh();
+    });
+  }
+  recompute();
+  shell.toast(`欢迎，${name}`);
+}
+
+/** 退出登录：清状态、揭开登录层、把菜单选中挪回首页 */
+function logout(): void {
+  clearLoginUser();
+  login.show();
+  shell.show('process');
+}
+
 /* ---------------- 启动 ---------------- */
 
 buildCase();
@@ -386,3 +424,11 @@ requestAnimationFrame(() => {
   viewport.fitViewport();
   recompute();
 });
+
+// 有登录态（同一标签页刷新）就直接进；否则停在登录页
+const remembered = readLoginUser();
+if (remembered) enterApp(remembered.name);
+else login.show();
+
+(window as any).__login = login;
+(window as any).__enterApp = enterApp;

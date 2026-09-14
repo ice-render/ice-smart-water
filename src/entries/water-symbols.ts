@@ -15,6 +15,7 @@ import { WATER_SYMBOL_PRESETS } from 'ice-entity-designer';
 import { computeLayout, measureCanvas, mountShell, type IslandSpec, type PageContext, type ShellLayout } from '../view/shell';
 import { mountIsland, placeIslands, type IslandHandle } from '../view/islands';
 import { installViewport } from '../view/canvas-viewport';
+import { clearLoginUser, mountLogin, readLoginUser, saveLoginUser } from '../view/login';
 import { SymbolLegend, cellAt } from '../view/symbol-legend';
 import { buildLegendPage, legendIslandRect, type LegendPageHandle } from '../view/pages/legend-page';
 
@@ -105,11 +106,17 @@ const shell = mountShell({
         { key: 'filter:boundary', label: '边界符号' },
       ],
     },
+    { key: 'logout', label: '退出登录', iconPath: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9' },
   ],
   selectedKey: 'legend',
   onMenuSelect: (key: string) => {
     if (key === 'editor') {
       window.location.href = './water-editor.html';
+      return;
+    }
+    if (key === 'logout') {
+      clearLoginUser();
+      login.show();
       return;
     }
     if (key.indexOf('filter:') === 0) {
@@ -151,6 +158,31 @@ islands.legend.canvas.addEventListener('click', (event) => {
   selectSymbol(cell.entry);
 });
 
+/* ---------------- 登录门 ---------------- */
+
+const login = mountLogin({
+  canvas: need<HTMLCanvasElement>('canvas-login'),
+  size: layout.canvas,
+  brand: {
+    name: 'ice-smart-water',
+    subtitle: '给排水工艺符号库',
+    intro: '21 种给排水符号的图例与业务语义：位号代号、常见介质、设计关注、运行巡检要点 —— 图例按分类排布，点任意符号看详情。',
+    features: ['水线处理单元', '污泥线单元', '设备与仪表', '边界符号'],
+  },
+  onLogin: (user) => enterApp(user.name),
+});
+
+function enterApp(name: string): void {
+  saveLoginUser({ name });
+  shell.setUser({ name, role: '符号库 · 21 种给排水符号' });
+  login.hide();
+  requestAnimationFrame(() => {
+    viewport.sizeCanvas();
+    viewport.fitViewport();
+  });
+  shell.toast(`欢迎，${name}`);
+}
+
 /* ---------------- 启动 ---------------- */
 
 shell.show('legend');
@@ -162,6 +194,13 @@ requestAnimationFrame(() => {
     { text: `${symbolsOfCategory('water').length + symbolsOfCategory('sludge').length} 种工艺单元`, status: 'info', width: 116 },
   ]);
 });
+
+const remembered = readLoginUser();
+if (remembered) enterApp(remembered.name);
+else login.show();
+
+(window as any).__login = login;
+(window as any).__enterApp = enterApp;
 
 (window as any).__symbols = {
   shell,

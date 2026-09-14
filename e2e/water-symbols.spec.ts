@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { canvasStats, clickCanvas, clickSubmenu, clickWidget, expectViewportInteractions } from './helpers';
+import { canvasStats, clickCanvas, clickSubmenu, clickWidget, expectViewportInteractions, login } from './helpers';
 
 /**
  * `water-symbols.html` 的端到端回归。
@@ -18,7 +18,9 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (err) => errors.push(String(err)));
   await page.goto('/water-symbols.html');
   await page.waitForFunction(() => !!(window as any).__symbols);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
+  // 每个用例都是新上下文：sessionStorage 空的，所以先过登录门（走真实输入路径）
+  await login(page, { name: '演示员 张三' });
 });
 
 test('图例：21 种符号全部渲染，分类计数 10 / 3 / 6 / 2', async ({ page }) => {
