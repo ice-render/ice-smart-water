@@ -193,7 +193,13 @@ test('卡片里的操作按钮：选中出水阀 → 点「阀门开 / 闭」→
   const before = await page.evaluate(() => (window as any).__water.trace.connected);
   expect(before).toBe(true);
 
-  await page.evaluate(() => (window as any).__water.designer.select('outletValve'));
+  // 注意：必须用**块体**回调。`designer.select()` 是链式 API，返回 designer 自身，
+  // 而它的对象图（场景树 + 引擎 + 各种管理器）太深，Playwright 把它序列化回 Node 时会报
+  // "Cannot serialize result: object reference chain is too long"。
+  // 这里只要副作用，所以让回调不返回值。
+  await page.evaluate(() => {
+    (window as any).__water.designer.select('outletValve');
+  });
   await page.waitForTimeout(150);
   await clickWidget(page, '#canvas-shell', "window.__water.shell.find('card-action-valve')");
 
