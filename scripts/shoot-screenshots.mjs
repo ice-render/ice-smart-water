@@ -1,7 +1,7 @@
 /**
  * 抓 ice-smart-water 的界面截图，写入 screenshots/，供 README 引用。
  *
- * 用法：先 `npm run build` 并起一个静态服务（例如 `npx http-server dist -p 8093 -c-1`），
+ * 用法：先 `npm run build` 并起一个静态服务（例如 `npx http-server dist -p 8092 -c-1`），
  *       再把 BASE 指过去，然后 `node scripts/shoot-screenshots.mjs`。
  *
  * 用系统 Chrome（channel:'chrome'），绕开 Playwright 自带无头壳与本地缓存版本对不上的坑
@@ -10,7 +10,9 @@
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
-const BASE = process.env.BASE || 'http://localhost:8093';
+// 端口用本仓自己的（家族端口分配见引擎仓 AGENTS.md）：8093 是 ice-web-components 的，
+// 曾经因为这里写串了端口，另一个仓的 e2e 静默复用了本仓的服务目录、全红。
+const BASE = process.env.BASE || 'http://localhost:8092';
 const OUT = 'screenshots';
 const VIEWPORT = { width: 1600, height: 950 };
 
@@ -87,6 +89,10 @@ async function gotoPage(page, key) {
 }
 
 async function shot(page, file) {
+  // 先把鼠标挪到侧栏空白处再拍：图表的悬浮提示（tooltip + 十字准星）是**跟随指针**画的，
+  // 点完顶栏页签后指针如果落在图表岛的范围内，截图里就会带一条"谁也没在悬停"的提示框。
+  await page.mouse.move(20, VIEWPORT.height - 20);
+  await page.waitForTimeout(260);
   await page.screenshot({ path: `${OUT}/${file}`, fullPage: false });
   console.log('  ✓', file);
 }
@@ -159,6 +165,21 @@ async function main() {
   await gotoPage(page, 'inspection');
   await page.waitForTimeout(900);
   await shot(page, '10-inspection.png');
+
+  // 11) 能耗分项（分项占比 + 峰谷电价）
+  await gotoPage(page, 'energy');
+  await page.waitForTimeout(900);
+  await shot(page, '11-energy.png');
+
+  // 12) 泵站监视（泵特性曲线 + 集水井液位）
+  await gotoPage(page, 'pump');
+  await page.waitForTimeout(900);
+  await shot(page, '12-pump.png');
+
+  // 13) 工况预案（预演步骤 + 达标度对比）
+  await gotoPage(page, 'drill');
+  await page.waitForTimeout(900);
+  await shot(page, '13-drill.png');
 
   await browser.close();
 
