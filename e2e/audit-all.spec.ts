@@ -38,6 +38,15 @@ const ISLAND_MAP: Record<string, Array<{ island: string; card: string }>> = {
   sludge: [{ island: 'sludge-flow', card: 'sludge-flow-card' }],
   asset: [{ island: 'asset-health', card: 'asset-health-card' }],
   inspection: [{ island: 'inspection-route', card: 'inspection-route-card' }],
+  energy: [
+    { island: 'energy-mix', card: 'energy-mix-card' },
+    { island: 'energy-tariff', card: 'energy-tariff-card' },
+  ],
+  pump: [
+    { island: 'pump-curve', card: 'pump-curve-card' },
+    { island: 'sump-level', card: 'sump-level-card' },
+  ],
+  drill: [{ island: 'drill-compare', card: 'drill-compare-card' }],
 };
 
 function worldOf(page: any, expr: string) {

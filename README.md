@@ -8,7 +8,7 @@
 而是把家族四件套按同一个业务场景（一座 10 万 m³/d 的 AAO 市政污水厂）拼起来，
 只写「水务这门生意」的逻辑。看这一页能知道家族各件东西**怎么组合、边界在哪里**。
 
-### 1.1 一个入口、两级导航、九个页签
+### 1.1 一个入口、两级导航、十二个页签
 
 整个系统**只有一个 HTML**（`index.html`）：所有功能都在同一张画布外壳里，切页时只把对应的「岛」
 摆出来（`display` 切换，不重新加载页面）。进应用先过**登录门**（见 [5](#5-登录门)）。
@@ -22,19 +22,22 @@
 | 工艺 | **工艺流程图** | 全流程编辑器：P&ID 编辑（34 个单元 / 37 段管线，含信号与动力线）+ 图纸校验 + 流径分析 + 实时指标 | 工艺图（设计器） | `WaterProcessDesigner`、`ICEStatCard`、卡片 `extra` 插槽 |
 | 工艺 | **符号库** | **31 种**给排水符号的图例 + 业务语义（作用 / 设计关注 / 巡检要点）+ 分类筛选 | 符号图例 | 域包符号库 + `ICESegmented` |
 | 工艺 | **工艺试算** | 工程师调参台：R / r / MLSS / 水温 / 负荷率 → 脱氮上界、泥龄、需氧、电耗、达标裕度 | 试算曲线 | `ICEForm` + 校验、`ICEInputNumber`、`ICESlider`、`ICEStatistic`、`function` 系列 + **`sweep` 参数扫动** |
+| 工艺 | **工况预案** | 预演四套预案（雨季超越 / 检修停运 / 低温硝化 / 冲击负荷）：步骤说明 → **达标度对比**（当前参数 vs 预案参数）→ 逐条偏差与结论 | 达标度对比 | `ICESegmented`（预案切换）、卡片 `extra` 插槽、复用 `sizing.evaluateScenario`（与工艺试算同一套模型）；`ice-chart` 分组柱 |
 | 运行 | **运行数据** | 24 小时进出水趋势 + 沿程水量与负荷 + 出水达标对照 + 运行审计 | 24 小时看板 | `ICETable` 分页/空态、`ice-chart` 双 y 轴 |
 | 运行 | **实时监视** | 模拟 SCADA 推送：6 个点位读数 + 三线滑动窗口趋势 + 溶解氧仪表 + 生化池分区热力图 | 趋势 / 仪表 / 热力图 | `appendData` 滑动窗口、`gauge`、`heatmap`、`ICESegmented`、`ICEButton` |
+| 运行 | **泵站监视** | 四台泵的工况 / 特性 / 集水井液位：转速与流量**按相似定律反推**，表里可人工投运停运备用泵，需求在运行泵之间重新平摊 | 泵特性 / 集水井液位 | `ICETable` + 行内启停按钮 + 行展开铭牌；`ice-chart` 双轴折线（效率 / 流量）、面积 + 高低温报警线 |
+| 运行 | **能耗分项** | 电花在哪儿：日耗电按分项摊分（装机 × 负载系数）→ 峰谷分时电量与电价 → 分项明细与口径说明 | 分项柱状 / 峰谷分摊 | `ICEStatCard`、`ICETag` 占比分档、`ICETable` 展开归入设备；`ice-chart` 柱 + 线双轴 |
 | 运营 | **事件中心** | 报警工单闭环：多选批量派单 + 行展开看处置轨迹 + 二次确认 + 通知 | — | `ICETable`（多选/展开/汇总/列筛选/自定义单元格）、`ICETimeline`、`attachPopconfirm`、`ICENotification` |
 | 运营 | **污泥产运** | 污泥处理与处置：浓缩 → 脱水 → 泥饼外运，**转移联单**（签发 / 过磅 / 签收 / 归档）状态机与闭合率 | 污泥流程 | `ICETable` + 行展开 `ICETimeline`、`ICETag` 状态、`attachPopconfirm`；`ice-chart` 双轴（柱=湿泥量、线=含水率） |
 | 运营 | **设备资产** | 设备全生命周期台账：**34 台设备由图上单元派生**（型号 / 供应商 / 投运日 / 健康度 / 维保计划 / 备件齐套） | 健康度矩阵 | `ICETable` + 健康度分档标签 + 展开备件；`ice-chart` **heatmap**（装置分类 × 五个健康维度） |
 | 运营 | **巡检管理** | 巡检点位**由 `SYMBOL_CATALOG` 的「巡检要点」派生** → 三条路线 → 班次任务 → 到位率 / 隐患闭环 | 路线到位情况 | `ICETable` + 就地登记结论 + 展开详情；`ice-chart` 分组柱（计划 / 已巡 / 超时） |
 
 内容由 `ice-entity-designer` 的两个示例（`examples/water-editor.html` / `water-symbols.html`）
-迁移而来，但迁移后不再是两段写在 HTML 里的脚本，而是**一个工程里的六个页签**。
+迁移而来，但迁移后不再是两段写在 HTML 里的脚本，而是**一个工程里的十二个页签**（三个域）。
 
 ## 2. 界面截图
 
-下面是运行中的真实截图（登录门 + 六个页签）。所有截图从当前代码由 `scripts/shoot-screenshots.mjs` 自动抓取
+下面是运行中的真实截图（登录门 + 十二个页签）。所有截图从当前代码由 `scripts/shoot-screenshots.mjs` 自动抓取
 （与 e2e 共用同一套系统 Chrome 环境），分辨率 3200×1900，直接嵌入本页。
 
 | 登录门 | 工艺流程图（选中二沉池 SC-101） |
@@ -61,6 +64,14 @@
 
 ![巡检管理](screenshots/10-inspection.png)
 
+| 能耗分项 | 泵站监视 |
+|---|---|
+| ![能耗分项](screenshots/11-energy.png) | ![泵站监视](screenshots/12-pump.png) |
+
+**工况预案**：预演步骤 + 达标度对比 + 逐条偏差
+
+![工况预案](screenshots/13-drill.png)
+
 ## 3. 家族能力怎么用（本仓与四件套的边界）
 
 ### 3.1 四件套分工
@@ -69,8 +80,8 @@
 |---|---|---|
 | `ice-render` | 画布引擎：命中测试、拖拽、视口缩放平移、脏矩形局部重绘、矢量导出 | 不碰渲染管线、不写变换矩阵 |
 | `ice-entity-designer` | 水工艺域设计器 `WaterProcessDesigner`：符号库 / 管线 / 走线 / 图纸校验 / 快照 / SVG | 不重写图元、不重写连线 |
-| `ice-web-components` | 全部界面：侧栏菜单（`ICEMenu`）、面包屑、卡片（`ICECard`）、指标卡（`ICEStatCard`）、统计数（`ICEStatistic`）、表格（`ICETable` 多选/展开/汇总/列筛选/自定义单元格）、表单（`ICEForm` + `ICEFormItem` 校验）、滑块 / 数字框 / 分段控件 / 开关 / 标签、时间线、抽屉、二次确认、通知与消息 | 不画按钮、不做主题 token |
-| `ice-chart` | 四种图：24 小时报表（双 y 轴折线 + 面积）、实时趋势（**`appendData` 滑动窗口**）、仪表（`gauge` 弹簧指针）、分区热力图（`heatmap` 滚动）、工艺试算曲线（`function` 系列 + **`sweep` 参数扫动** + `scatter` 工作点） | 不写绘制代码，只给声明式 option |
+| `ice-web-components` | 全部界面：侧栏菜单（`ICEMenu`）、顶栏页签（`ICESegmented`）、卡片（`ICECard`）、指标卡（`ICEStatCard`）、统计数（`ICEStatistic`）、表格（`ICETable` 多选/展开/汇总/列筛选/自定义单元格）、表单（`ICEForm` + `ICEFormItem` 校验）、滑块 / 数字框 / 分段控件 / 开关 / 标签、时间线、抽屉、二次确认、通知与消息 | 不画按钮、不做主题 token |
+| `ice-chart` | 图表：24 小时报表（双 y 轴折线 + 面积）、实时趋势（**`appendData` 滑动窗口**）、仪表（`gauge` 弹簧指针）、分区热力图（`heatmap` 滚动）、工艺试算曲线（`function` 系列 + **`sweep` 参数扫动** + `scatter` 工作点）、分项柱状、峰谷柱 + 线双轴、泵特性双轴折线、集水井面积 + 报警线、预案对比分组柱 | 不写绘制代码，只给声明式 option |
 
 ### 3.2 本仓只写业务
 
@@ -103,7 +114,7 @@ ice-web-components 画在同一张画布上**，页面里几乎没有 DOM ——
 
 ### 4.2 岛（island）= 独立画布 + 独立 `ICE` 实例
 
-DOM 里一共 **10 张岛画布**，按**外壳坐标**绝对定位，嵌在外壳卡片挖好的「洞」里
+DOM 里一共 **15 张岛画布**，按**外壳坐标**绝对定位，嵌在外壳卡片挖好的「洞」里
 （卡的正文区留空、岛画布透明底），视觉上就是「图长在卡里」：
 
 | 岛 | 所在页签 | 为什么必须独立 |
@@ -116,6 +127,9 @@ DOM 里一共 **10 张岛画布**，按**外壳坐标**绝对定位，嵌在外�
 | `island-sludge-flow`（污泥流程） | 污泥产运 | `ice-chart` 双轴：湿泥量（柱）+ 含水率（线） |
 | `island-asset-health`（健康度矩阵） | 设备资产 | `ice-chart` **heatmap**：装置分类 × 五个健康维度 |
 | `island-inspection-route`（路线到位） | 巡检管理 | `ice-chart` 分组柱：计划 / 已巡 / 超时 |
+| `island-energy-mix` / `-tariff`（分项 / 峰谷） | 能耗分项 | 两张 `ice-chart`：柱状（分项耗电）、柱 + 线双轴（电量 / 电价） |
+| `island-pump-curve` / `island-sump-level`（泵特性 / 集水井） | 泵站监视 | 两张 `ice-chart`：双轴折线（效率 / 流量）、面积 + 两条报警线 |
+| `island-drill-compare`（达标度对比） | 工况预案 | 一张 `ice-chart` 分组柱：当前参数 vs 预案参数 |
 
 岛的做法：DOM 里各放一个 `<div class="island">` + `<canvas>`；切页时由 `onIslands` 回调负责摆位，
 并**隐藏不在本页的岛**（岛不在引擎显示树里，不处理会「飘着」）。
@@ -170,6 +184,12 @@ DOM 里一共 **10 张岛画布**，按**外壳坐标**绝对定位，嵌在外�
    在模型里的体现（六项指标里它的裕度最小）。
 2. **二沉池不接内回流**：内回流是生物池内部的循环（好氧池末端 → 缺氧池），把它算进二沉池
    会凭空抬高表面负荷 50%。水量平衡按 `Q(1+R)` 给二沉池、按 `Q(1+R+r)` 给好氧池。
+3. **泵的转速由流量反推，而不是查表**：按相似定律 `Q ∝ n`、`H ∝ n²`、`P ∝ n³`，工作点落在
+   该转速下的效率曲线上。所以「图上流量一变，泵的转速 / 效率 / 单位提升电耗全跟着变」——
+   这些数不是写死的，是同一套流量数据推出来的（投运备用泵后需求在运行泵之间重新平摊）。
+4. **工况预案复用工艺试算的模型**：预案页的每个数字都来自 `sizing.evaluateScenario`，
+   与「工艺试算」页同一套参数同一套公式，切到那页手填同样参数能算出同一个结果。
+   附带的「切换耗时」是**调度属性**（人工给的经验值），页面上明确标注它不是模型输出。
 
 设计参数为**演示取值**（污水厂设计参数的量级），不构成工程依据。
 
@@ -220,7 +240,7 @@ npm run verify       # types:check + test + build
 ## 9. 目录结构
 
 ```
-public/            唯一入口页的 HTML 模板（外壳画布 + 登录层画布 + 消息覆盖画布 + 7 个岛容器；脚本由 webpack 注入）
+public/            唯一入口页的 HTML 模板（外壳画布 + 登录层画布 + 消息覆盖画布 + 15 个岛容器；脚本由 webpack 注入）
 src/
   domain/          业务逻辑（纯函数、可单测，唯一允许 import 的是兄弟包的类型）
     water-quality.ts    水质指标 / GB 18918-2002 一级 A 限值 / 达标判定与裕度
@@ -237,18 +257,22 @@ src/
     sludge-manifest.ts  污泥产运：沿流程折算（干泥守恒）+ 外运联单状态机 + 处置成本
     asset-registry.ts   设备台账：单元派生 + 健康度 / MTBF / 维保计划 / 备件（hashOf 确定性）
     inspection.ts       巡检：点位由符号目录的「巡检要点」派生 + 班次任务 + 到位率 / 隐患闭环
+    energy-meter.ts     能耗分项：分项计量树（装机 × 负载系数）+ 峰谷电价分摊 + 吨水 / 单位去除电耗
+    pump-station.ts     泵站：相似定律反推工况（转速 / 效率 / 轴功率）+ 人工启停重平摊 + 集水井液位
+    drill-plan.ts       工况预案：四套预案 → 预演步骤（复用 sizing.evaluateScenario）+ 逐条偏差
   view/            与家族打交道的一层
     adapter.ts          设计器 → 扁平图（引擎结构与业务结构之间唯一的接触点）
-    shell.ts            画布化外壳：侧栏 ICEMenu / 顶栏 / 卡片栅格 / 页签切换 / 岛的回调 / 消息覆盖画布
+    shell.ts            画布化外壳：侧栏 ICEMenu / 顶栏页签 / 卡片栅格 / 域切换 / 岛的回调 / 消息覆盖画布
     login.ts            登录门：画布覆盖层 + 表单 + sessionStorage 登录态
     islands.ts          岛的摆位与显隐（DOM 画布按外壳坐标嵌进卡片的洞）
     canvas-viewport.ts  岛的铺满容器 + 滚轮锚点缩放 + 拖拽平移
     board.ts            图表装配 + option 构造（ice-chart）
     symbol-legend.ts    符号图例的版面计算（纯函数）与渲染
-    pages/              九个页面：process / data / live / calc / events / legend / sludge / asset / inspection
+    pages/              十二个页面：process / legend / calc / drill / data / live / pump / energy / events / sludge / asset / inspection
   entries/app.ts   唯一入口（只做装配与状态编排，不写业务规则）
 tests/domain/      jest 单测（镜像 domain 结构）
 e2e/               Playwright 端到端 + 画布断言工具（按坐标点控件、按像素验绘制）
+scripts/           截图脚本（与 e2e 共用系统 Chrome 环境）
 .github/workflows/ GitHub Pages 部署工作流
 ```
 

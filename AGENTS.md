@@ -68,7 +68,7 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 8. **`__water` 这类调试句柄只建一次，业务字段用 getter**：在 `recompute()` 里反复重建它，
    会互相覆盖成"上一帧的快照"（踩过）。
 
-## 三个新增业务模块的口径（改之前先看）
+## 新增业务模块的口径（改之前先看）
 
 - **`live-signal.ts`**：实时点位用**确定性随机游走**（同种子同序列）—— 现场数据是活的，
   但演示与端到端断言需要可复现。采样循环在**入口**（`setInterval`），页面只负责显示。
@@ -78,6 +78,17 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
   改 `UNIT_REMOVAL` 或厂站参数会同时影响两边，跑一下 `tests/domain/sizing.test.ts` 就知道有没有跑偏。
 - **`alarm-log.ts`**：报警 = **历史存量 + 现场报警**（审计条目 / 24h 越限小时 / 工况事件）。
   处置是**不可变**的（`ackAlarm` / `closeAlarm` 返回新数组），轨迹只追加。
+- **`energy-meter.ts`**：分项日耗电 = 装机 × 负载系数 × 24，**分项之和必须等于全厂日耗电**
+  （单测钉死守恒）；峰谷三档按**价格升序**（谷 → 平 → 峰）声明，图表直接照数组顺序画。
+- **`pump-station.ts`**：泵工况由业务流量**按相似定律反推**（`Q ∝ n`、`H ∝ n²`、`P ∝ n³`），
+  不查特性表 —— 这样"图上流量一变，转速 / 效率 / 单位电耗全跟着变"是算出来的。
+  人工启停用 `overrides`（泵 id → 是否运行），空对象 = 按铭牌角色（工作泵转、备用泵停）。
+  相似定律的断言要**放宽精度**：转速会四舍五入到 2 位小数，别按等式死比。
+- **`drill-plan.ts`**：预案**复用 `sizing.evaluateScenario`**，不另造模型 —— 页面上的每个数字
+  都要能在「工艺试算」页用同一套参数复现。`switchMinutes` 是**调度属性**（经验值），
+  页面上必须标注它不是模型输出，别混进 `evaluateScenario` 的结果里。
+  另外注意：雨季预案的**电耗变化是负的**（流量大、单位电耗反而降），"达标项数"的分值上限是 100
+  （不是 100%），写断言时别按直觉来。
 
 ## 版面：位置别手算，也别信"看着没重叠"
 
@@ -86,6 +97,10 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
   另外**正文的起点不能是 `CARD_INSET`(16)** —— 卡片标题带占了 0~44，从标题带下方（52）起排。
 - **卡片标题不能太长**：右上角放了 `extra`（按钮组）时，标题可用宽度 =
   卡宽 − 内边距 − extra 宽。实时趋势卡的 extra 有 470 宽，标题超过约 350px 就会压上去。
+- **正文容器要落在卡片正文区**（`left: CARD_INSET` / `top: CARD_TITLE_BAND`）。
+  `extra` 与标题同在 12~44 这条带里（实测：标题 top=12 h=16、分段控件 top=12 h=32），
+  所以正文从 44 起正好贴住、不会压上去；**放在 (0,0) 就一定会压标题与 extra**
+  （工况预案卡的预演步骤正文踩过）。
 - **统计卡列宽按实际张数算**：符号库页有 5 张卡（总数 + 4 个分类），按 4 列算宽会让第 5 张
   **冲出画布右边**（超出之后直接被裁掉，看起来像"少了一块"）。
 - **`e2e/layout.spec.ts` 是这类问题的护栏**：跑 `npm run test:e2e` 会逐页体检。
@@ -146,3 +161,25 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 
 `ice-entity-designer/examples/water-editor.html` 与 `water-symbols.html` 仍然存在（上游 e2e 依赖它们），
 本仓的入口是**重写过的工程版**，不是那两个文件的镜像。上游改了示例页，本仓不需要跟着改。
+
+## 布局机制与依赖（2026-09-15 确立）
+
+- **统计卡一行用引擎的等分网格**：`createStatRow()`（`src/view/shell.ts`）返回一个持有
+  `ICEGridLayout({ cols, cellSizing: 'equal' })` 的行容器，卡片加进去即可 —— 不要再在页面里写
+  `statWidth = floor((inner.width - gap*(n-1))/n)` 与 `left = x0 + index*(statWidth+gap)`。
+  卡片的宽度与位置由布局算，卡片**内部**由 `ICEStatCard` 自持策略跟随（`ice-web-components` 1.9.2 起）。
+- **精确构图（卡片 rect / 岛）继续用坐标**：`computeLayout()` 给的设计矩形是仪表盘构图语义，
+  不要硬套布局器。
+- **第二轮回核（2026-09-15）**：逐页看过手工 `left/top` 之后，结论与上一条一致 ——
+  本仓手写坐标分三类，都不该改：① `computeLayout()` 的设计矩形（仪表盘构图）；
+  ② 卡片正文里的 `top: y0 + STAT_HEIGHT + PAGE_GAP` 这类**卡片版式推算**（卡片是画布上的绝对矩形，
+  正文跟着卡片走，属于构图）；③ `symbol-legend.ts` 的**图纸网格**（版面本身就是内容，
+  而且同一份 `legendLayout()` 还要给命中 `cellAt()` 用 —— 迁移只会多一层映射）。
+  真正该用机制的是"同一组东西等距排"的场景，已经改完了：统计卡一行（`createStatRow()`）、
+  `ICERadioGroup` / `ICECheckboxGroup`（组件内部，见组件库 1.10.1）。
+- **不要 `file:` 链接组件库**：`ice-web-components` 自带 peer 解析，`file:` 链接会让
+  `node_modules/ice-web-components/node_modules/ice-render` 出现**第二份引擎实例** ——
+  类型上 `ICEGridLayout` 与库的 `ICELayoutManager` 互不兼容（`Types have separate declarations
+  of a private property`）。做法：**依赖已发布版本**（`"ice-web-components": "^1.9.2"`），
+  引擎仍可用 `file:../ice-render`（它是 peer，会解析到应用这一份）；若安装后又出现嵌套副本，
+  跑一次 `npm dedupe`。

@@ -5,47 +5,9 @@
  * ① 页签切得过去、岛真的露出来、图画出了墨；② 页面数字与 domain 数据一致；
  * ③ 动作真的改了状态（且整页零 console / pageerror）。
  */
-import { expect, test, type Page } from '@playwright/test';
-import { canvasStats, login, openPage } from './helpers';
+import { expect, test } from '@playwright/test';
+import { canvasStats, expectTableFits, login, openPage } from './helpers';
 
-/**
- * 表格的每一列都必须落在**表格自己的盒子**里。
- *
- * 为什么单独守这条：列宽之和超过表格宽度时，`ICETable` 不会报错、也不会裁剪 ——
- * 列会静默挤到卡片外面（实测：右侧「状态」标签被切掉一半）。版面体检抓不到它，
- * 因为表格是库控件，体检到它就停止下探了。
- */
-async function expectTableFits(page: Page, tableId: string): Promise<void> {
-  const overflow = await page.evaluate((id) => {
-    const table = (window as any).__water.shell.find(id);
-    if (!table) return [`找不到表格 ${id}`];
-    const world = (node: any) => {
-      let left = 0;
-      let cursor = node;
-      while (cursor && cursor.state) {
-        left += Number(cursor.state.left) || 0;
-        cursor = cursor.parentNode;
-      }
-      return left;
-    };
-    const tableLeft = world(table);
-    const tableRight = tableLeft + (Number(table.state.width) || 0);
-    const bad: string[] = [];
-    const walk = (node: any, depth: number) => {
-      if (!node || !node.state || depth > 6) return;
-      const left = world(node);
-      const right = left + (Number(node.state.width) || 0);
-      if (right > tableRight + 2 || left < tableLeft - 2) {
-        const label = String(node.state.id || node.state.text || '节点');
-        bad.push(`${label}[${Math.round(left)}..${Math.round(right)}] 越出表格[${Math.round(tableLeft)}..${Math.round(tableRight)}]`);
-      }
-      (node.childNodes || []).forEach((child: any) => walk(child, depth + 1));
-    };
-    (table.childNodes || []).forEach((child: any) => walk(child, 1));
-    return bad.slice(0, 5);
-  }, tableId);
-  expect(overflow, `${tableId} 的列越出表格盒：\n${overflow.join('\n')}`).toEqual([]);
-}
 
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];

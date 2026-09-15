@@ -36,6 +36,7 @@ import {
   PAGE_GAP,
   PAGE_PADDING,
   createCard,
+  createStatRow,
   paragraph,
   type PageContext,
   type PageHandle,
@@ -99,7 +100,9 @@ export function buildEventsPage(ctx: PageContext, deps: EventsPageDeps): EventsP
   });
 
   /* ---------------- 第一行：四个统计 ---------------- */
-  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 3) / 4);
+  // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
+  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 4, gap: PAGE_GAP });
+  page.addChild(statRow, false);
   const statConfigs = [
     { title: '未处理', icon: '⚑', trend: '待派单 / 处置', type: 'error' as const },
     { title: '已确认', icon: '◐', trend: '处理中', type: 'warning' as const },
@@ -108,9 +111,6 @@ export function buildEventsPage(ctx: PageContext, deps: EventsPageDeps): EventsP
   ];
   const statCards = statConfigs.map((config, index) => {
     const card = new ICEStatCard({
-      left: x0 + index * (statWidth + PAGE_GAP),
-      top: y0,
-      width: statWidth,
       height: STAT_HEIGHT,
       icon: config.icon,
       title: config.title,
@@ -118,7 +118,7 @@ export function buildEventsPage(ctx: PageContext, deps: EventsPageDeps): EventsP
       trend: config.trend,
       trendType: config.type,
     });
-    page.addChild(card, false);
+    statRow.addChild(card, false);
     return card;
   });
 
