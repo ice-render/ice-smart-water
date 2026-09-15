@@ -170,6 +170,13 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
   卡片的宽度与位置由布局算，卡片**内部**由 `ICEStatCard` 自持策略跟随（`ice-web-components` 1.9.2 起）。
 - **精确构图（卡片 rect / 岛）继续用坐标**：`computeLayout()` 给的设计矩形是仪表盘构图语义，
   不要硬套布局器。
+- **第二轮回核（2026-09-15）**：逐页看过手工 `left/top` 之后，结论与上一条一致 ——
+  本仓手写坐标分三类，都不该改：① `computeLayout()` 的设计矩形（仪表盘构图）；
+  ② 卡片正文里的 `top: y0 + STAT_HEIGHT + PAGE_GAP` 这类**卡片版式推算**（卡片是画布上的绝对矩形，
+  正文跟着卡片走，属于构图）；③ `symbol-legend.ts` 的**图纸网格**（版面本身就是内容，
+  而且同一份 `legendLayout()` 还要给命中 `cellAt()` 用 —— 迁移只会多一层映射）。
+  真正该用机制的是"同一组东西等距排"的场景，已经改完了：统计卡一行（`createStatRow()`）、
+  `ICERadioGroup` / `ICECheckboxGroup`（组件内部，见组件库 1.10.1）。
 - **不要 `file:` 链接组件库**：`ice-web-components` 自带 peer 解析，`file:` 链接会让
   `node_modules/ice-web-components/node_modules/ice-render` 出现**第二份引擎实例** ——
   类型上 `ICEGridLayout` 与库的 `ICELayoutManager` 互不兼容（`Types have separate declarations
