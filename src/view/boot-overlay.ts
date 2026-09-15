@@ -24,6 +24,30 @@ export function hideBootOverlay(): void {
   window.setTimeout(() => overlay.remove(), 400);
 }
 
+/**
+ * 等**首个可见的引擎实例真正画完一帧**再撤遮罩。
+ *
+ * 为什么不用"第 N 帧之后"这种固定时机：启动段里 `recompute()`（建 12 个页签的内容）会占住
+ * 主线程几百毫秒，而**登录门 / 外壳各自有独立画布**，它们的首帧并不需要等 `recompute` 跑完。
+ * 固定时机要么早撤（露出还没画的白页），要么晚撤（本地实测白等 0.7s）。
+ * 判据用 `ice.dirty === false` —— 渲染器每跑完一轮都会把它清掉，是可靠的"已上屏一次"信号。
+ *
+ * 兜底：最多等 60 帧（约 1s）。引擎没起来 / 画布一直不脏时，遮罩不能无限期挂着。
+ */
+export function hideBootOverlayWhenPainted(ice: any): void {
+  let frames = 0;
+  const tick = (): void => {
+    const painted = !!ice && ice.dirty === false;
+    if (painted || frames >= 60) {
+      hideBootOverlay();
+      return;
+    }
+    frames += 1;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 /** 遮罩是否还在（供 e2e 与调试使用）。 */
 export function isBootOverlayVisible(): boolean {
   if (typeof document === 'undefined') {

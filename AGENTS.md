@@ -128,8 +128,11 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 
 1. 遮罩本体在 `public/index.html`（纯 HTML/CSS + 一行内联脚本），**不依赖 bundle**；
    `body.is-booting` 期间连 `.app` 一起 `visibility: hidden`（否则遮罩没盖上时仍会露出那个矩形）。
-2. 撤下时机：应用**首帧之后**（`src/entries/app.ts` 启动段的嵌套 `requestAnimationFrame` →
-   `hideBootOverlay()`，见 `src/view/boot-overlay.ts`）。早一帧撤会闪一瞬空白。
+2. 撤下时机：**等"接下来会露出来的那一层"真正画完一帧**——`hideBootOverlayWhenPainted(ice)`
+   （`src/view/boot-overlay.ts`）以 `ice.dirty === false` 为信号（渲染器每跑完一轮都会清它），
+   登录态决定等登录门的 ICE 还是外壳的 ICE，60 帧兜底。
+   **不要用"第 N 帧之后"这种固定时机**：启动段里 `recompute()`（建 12 个页签内容）会占住主线程几百毫秒，
+   而登录门/外壳各有独立画布、并不需要等它 —— 固定早撤会露出白页，固定晚撤会白等（本地实测多等 0.7s）。
 3. 遮罩 **`pointer-events: none`**：加载期间本来没有可点的东西，而拦点击会让 e2e 的画布坐标点击
    与 `elementFromPoint` 命中断言全部落空（"遮罩盖住登录画布"这类断言会假红）。
 

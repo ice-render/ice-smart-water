@@ -155,7 +155,7 @@ import {
 import { buildDrillPage, drillCompareIslandRect, type DrillPageHandle } from '../view/pages/drill-page';
 import { graphOfDesigner } from '../view/adapter';
 import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
-import { hideBootOverlay } from '../view/boot-overlay';
+import { hideBootOverlayWhenPainted } from '../view/boot-overlay';
 
 function need<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -1282,9 +1282,6 @@ requestAnimationFrame(() => {
   viewport.sizeCanvas();
   viewport.fitViewport();
   recompute();
-  // 首帧之后再撤启动遮罩：多等一帧，确保外壳 / 登录门已经上屏（否则会看到一瞬空白）。
-  // 遮罩本身在 public/index.html 里（纯 HTML/CSS），见 src/view/boot-overlay.ts。
-  requestAnimationFrame(() => hideBootOverlay());
 });
 
 // 实时采样：进应用后才开始（登录门后面不必空跑）
@@ -1292,6 +1289,10 @@ const remembered = readLoginUser();
 if (remembered) liveStart();
 if (remembered) enterApp(remembered.name);
 else login.show();
+
+// 撤启动遮罩：等"接下来会露出来的那一层"画完一帧（登录门或外壳，各自有独立画布）。
+// 遮罩本体在 public/index.html 里（纯 HTML/CSS），见 src/view/boot-overlay.ts。
+hideBootOverlayWhenPainted(remembered ? shell.ice : login.ice);
 
 // 端到端测试与人工排查的观察点。
 //
