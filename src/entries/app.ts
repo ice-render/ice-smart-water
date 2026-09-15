@@ -54,7 +54,8 @@ import {
 } from '../view/shell';
 import { mountIsland, placeIslands, type IslandHandle } from '../view/islands';
 import { installViewport } from '../view/canvas-viewport';
-import { clearLoginUser, mountLogin, readLoginUser, saveLoginUser } from '../view/login';
+import { clearLoginUser, readLoginUser, saveLoginUser } from '../view/login';
+import { login, setEnterApp } from './login-boot';
 import {
   assetHealthOption,
   dailyTrendOption,
@@ -1232,14 +1233,6 @@ islands.legend.canvas.addEventListener('click', (event) => {
   selectSymbol(cell.entry);
 });
 
-/* ================= 登录门 ================= */
-
-const login = mountLogin({
-  canvas: need<HTMLCanvasElement>('canvas-login'),
-  size: layout.canvas,
-  onLogin: (user) => enterApp(user.name),
-});
-
 /** 进入应用：记住登录态、把用户带到侧栏署名上、揭开登录层 */
 function enterApp(name: string): void {
   saveLoginUser({ name });
@@ -1284,21 +1277,26 @@ requestAnimationFrame(() => {
   recompute();
 });
 
-// 实时采样：进应用后才开始（登录门后面不必空跑）
-const remembered = readLoginUser();
-if (remembered) liveStart();
-if (remembered) enterApp(remembered.name);
-else login.show();
-
-// 撤启动遮罩：等"接下来会露出来的那一层"画完一帧（登录门或外壳，各自有独立画布）。
-// 遮罩本体在 public/index.html 里（纯 HTML/CSS），见 src/view/boot-overlay.ts。
-hideBootOverlayWhenPainted(remembered ? shell.ice : login.ice);
+// 登录门的提交在这里接管：用户在控制台加载期间就按过"登录"的，排队的那次会立刻生效
+// （`login` 句柄来自 ./login-boot —— 入口 chunk 已经把它挂好了）。
+setEnterApp((name) => enterApp(name));
+if (login.visible()) {
+  // 正常路径：没有排队提交、登录门还亮着 → 按登录态决定进应用还是等用户输入
+  const remembered = readLoginUser();
+  if (remembered) {
+    liveStart();
+    enterApp(remembered.name);
+    // 登录门不会亮，遮罩要等外壳画出来再撤（登录门那条路径由 login-boot 负责撤）
+    hideBootOverlayWhenPainted(shell.ice);
+  } else {
+    login.show(); // login-boot 已经 show 过，这里幂等兜底
+  }
+}
 
 // 端到端测试与人工排查的观察点。
 //
 // 业务状态用 **getter** 暴露：`__water` 只建一次，`recompute()` 改了模块级变量之后
 // 读到的就是最新值 —— 在 recompute 里反复重建这个对象则会互相覆盖（踩过）。
-(window as any).__login = login;
 (window as any).__water = {
   shell,
   designer,
