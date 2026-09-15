@@ -58,9 +58,14 @@ import { clearLoginUser, mountLogin, readLoginUser, saveLoginUser } from '../vie
 import {
   assetHealthOption,
   dailyTrendOption,
+  drillCompareOption,
+  energyMixOption,
   inspectionRouteOption,
   mountChart,
+  pumpCurveOption,
   sludgeFlowOption,
+  sumpLevelOption,
+  tariffOption,
 } from '../view/board';
 import {
   AERATION_ZONES,
@@ -94,6 +99,18 @@ import {
   sludgeKpi,
   sludgeStages,
   summarizeManifests,
+  DRILL_PLANS,
+  drillCompareData,
+  drillKpi,
+  energyKpi,
+  energyMixData,
+  makeDrillPlan,
+  meterTree,
+  pumpCurve,
+  pumpKpi,
+  pumpStations,
+  runDrill,
+  tariffBandData,
   type AlarmEvent,
   type ScenarioParams,
   type ScenarioResult,
@@ -123,6 +140,19 @@ import {
   inspectionRouteIslandRect,
   type InspectionPageHandle,
 } from '../view/pages/inspection-page';
+import {
+  buildEnergyPage,
+  energyMixIslandRect,
+  tariffIslandRect,
+  type EnergyPageHandle,
+} from '../view/pages/energy-page';
+import {
+  buildPumpPage,
+  pumpCurveIslandRect,
+  sumpLevelIslandRect,
+  type PumpPageHandle,
+} from '../view/pages/pump-page';
+import { buildDrillPage, drillCompareIslandRect, type DrillPageHandle } from '../view/pages/drill-page';
 import { graphOfDesigner } from '../view/adapter';
 import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
 
@@ -148,6 +178,11 @@ const islands: Record<string, IslandHandle> = {
   'sludge-flow': mountIsland('sludge-flow', need<HTMLCanvasElement>('canvas-sludge-flow')),
   'asset-health': mountIsland('asset-health', need<HTMLCanvasElement>('canvas-asset-health')),
   'inspection-route': mountIsland('inspection-route', need<HTMLCanvasElement>('canvas-inspection-route')),
+  'energy-mix': mountIsland('energy-mix', need<HTMLCanvasElement>('canvas-energy-mix')),
+  'energy-tariff': mountIsland('energy-tariff', need<HTMLCanvasElement>('canvas-energy-tariff')),
+  'pump-curve': mountIsland('pump-curve', need<HTMLCanvasElement>('canvas-pump-curve')),
+  'sump-level': mountIsland('sump-level', need<HTMLCanvasElement>('canvas-sump-level')),
+  'drill-compare': mountIsland('drill-compare', need<HTMLCanvasElement>('canvas-drill-compare')),
 };
 // 先把所有岛摆到位再建引擎：引擎初始化要读画布尺寸，摆之前是 0×0
 islands.process.place(processIslandRect(layout));
@@ -160,6 +195,11 @@ islands['calc-curve'].place(curveIslandRect(layout));
 islands['sludge-flow'].place(sludgeFlowIslandRect(layout));
 islands['asset-health'].place(assetHealthIslandRect(layout));
 islands['inspection-route'].place(inspectionRouteIslandRect(layout));
+islands['energy-mix'].place(energyMixIslandRect(layout));
+islands['energy-tariff'].place(tariffIslandRect(layout));
+islands['pump-curve'].place(pumpCurveIslandRect(layout));
+islands['sump-level'].place(sumpLevelIslandRect(layout));
+islands['drill-compare'].place(drillCompareIslandRect(layout));
 
 /* ================= 岛 1：工艺图（设计器） ================= */
 
@@ -282,6 +322,49 @@ const assetHealth = mountChart(islands['asset-health'].canvas, () =>
 /** 巡检路线到位情况：计划 / 已巡 / 超时 */
 const inspectionRoute = mountChart(islands['inspection-route'].canvas, () =>
   inspectionRouteOption(routeStats(inspectionTasks)) as any
+);
+
+/* ================= 运行/工艺类三个场景的状态与图 ================= */
+
+/** 泵组人工启停（泵 id → 是否运行）；空对象 = 按铭牌角色（工作泵转、备用泵停） */
+let pumpOverrides: Record<string, boolean> = {};
+/** 当前演练预案 */
+let drillPlanId = 'rain';
+
+function currentPumps() {
+  return pumpStations(kpi, graphOfDesigner(designer).nodes, designs, 20260915, pumpOverrides);
+}
+function currentEnergy() {
+  return energyKpi(kpi, dayPoints, graphOfDesigner(designer).nodes, designs, meta);
+}
+function currentDrill() {
+  const plan = makeDrillPlan(drillPlanId) || DRILL_PLANS[0];
+  return runDrill(plan);
+}
+
+/** 能耗分项：柱状图 */
+const energyMix = mountChart(islands['energy-mix'].canvas, () =>
+  energyMixOption(energyMixData(meterTree(kpi, graphOfDesigner(designer).nodes, designs))) as any
+);
+
+/** 峰谷分摊：柱 + 线 */
+const energyTariff = mountChart(islands['energy-tariff'].canvas, () =>
+  tariffOption(tariffBandData(currentEnergy().tariff)) as any
+);
+
+/** 泵特性曲线 */
+const pumpCurveChart = mountChart(islands['pump-curve'].canvas, () => pumpCurveOption(pumpCurve()) as any);
+
+/** 集水井液位：面积 + 高 / 低报警线 */
+const sumpLevelChart = mountChart(islands['sump-level'].canvas, () => {
+  const stations = currentPumps();
+  const sump = stations.filter((station) => station.id === 'inlet')[0] || stations[0];
+  return sumpLevelOption(sump ? sump.levelSeries : [], { high: 0.85, low: 0.25 }) as any;
+});
+
+/** 预案达标度对比 */
+const drillCompare = mountChart(islands['drill-compare'].canvas, () =>
+  drillCompareOption(drillCompareData(currentDrill())) as any
 );
 
 function snapshot() {
@@ -444,6 +527,9 @@ let eventsPage: EventsPageHandle | null = null;
 let sludgePage: SludgePageHandle | null = null;
 let assetPage: AssetPageHandle | null = null;
 let inspectionPage: InspectionPageHandle | null = null;
+let energyPage: EnergyPageHandle | null = null;
+let pumpPage: PumpPageHandle | null = null;
+let drillPage: DrillPageHandle | null = null;
 let operatorName = '值班员';
 
 function refreshAlarms(): void {
@@ -539,6 +625,11 @@ function recompute(): void {
   if (islands['sludge-flow'].visible()) sludgeFlow.refresh();
   if (islands['asset-health'].visible()) assetHealth.refresh();
   if (islands['inspection-route'].visible()) inspectionRoute.refresh();
+  if (islands['energy-mix'].visible()) energyMix.refresh();
+  if (islands['energy-tariff'].visible()) energyTariff.refresh();
+  if (islands['pump-curve'].visible()) pumpCurveChart.refresh();
+  if (islands['sump-level'].visible()) sumpLevelChart.refresh();
+  if (islands['drill-compare'].visible()) drillCompare.refresh();
   refreshAlarms();
   shell.refresh();
   graphIce.dirty = true;
@@ -719,6 +810,7 @@ const NAV_DOMAINS: ShellDomain[] = [
       { key: 'process', label: '工艺流程图' },
       { key: 'legend', label: '符号库' },
       { key: 'calc', label: '工艺试算' },
+      { key: 'drill', label: '工况预案' },
     ],
   },
   {
@@ -728,6 +820,8 @@ const NAV_DOMAINS: ShellDomain[] = [
     pages: [
       { key: 'data', label: '运行数据' },
       { key: 'live', label: '实时监视' },
+      { key: 'pump', label: '泵站监视' },
+      { key: 'energy', label: '能耗分项' },
     ],
   },
   {
@@ -962,6 +1056,52 @@ const shell = mountShell({
         return inspectionPage;
       },
     },
+    {
+      key: 'energy',
+      label: '能耗分项',
+      build: (ctx: PageContext) => {
+        energyPage = buildEnergyPage(ctx, {
+          energy: () => currentEnergy(),
+          nodes: () => meterTree(kpi, graphOfDesigner(designer).nodes, designs),
+        });
+        return energyPage;
+      },
+    },
+    {
+      key: 'pump',
+      label: '泵站监视',
+      build: (ctx: PageContext) => {
+        pumpPage = buildPumpPage(ctx, {
+          stations: () => currentPumps(),
+          onToggle: (pumpId: string) => {
+            const pump = currentPumps()
+              .flatMap((station) => station.pumps)
+              .filter((item) => item.id === pumpId)[0];
+            pumpOverrides = { ...pumpOverrides, [pumpId]: !(pump && pump.running) };
+          },
+          onReset: () => {
+            pumpOverrides = {};
+          },
+          overrides: () => ({ ...pumpOverrides }),
+        });
+        return pumpPage;
+      },
+    },
+    {
+      key: 'drill',
+      label: '工况预案',
+      build: (ctx: PageContext) => {
+        drillPage = buildDrillPage(ctx, {
+          planId: () => drillPlanId,
+          onSelectPlan: (id: string) => {
+            drillPlanId = id;
+          },
+          run: () => currentDrill(),
+          plans: DRILL_PLANS.map((plan) => ({ id: plan.id, name: plan.name })),
+        });
+        return drillPage;
+      },
+    },
   ],
   onIslands: (specs: IslandSpec[]) => {
     placeIslands(islands, specs);
@@ -1014,6 +1154,29 @@ const shell = mountShell({
       requestAnimationFrame(() => {
         inspectionRoute.resize();
         inspectionRoute.refresh();
+      });
+    }
+    // 运行/工艺类三页的五张图同理
+    if (specs.some((spec) => spec.id === 'energy-mix')) {
+      requestAnimationFrame(() => {
+        energyMix.resize();
+        energyMix.refresh();
+        energyTariff.resize();
+        energyTariff.refresh();
+      });
+    }
+    if (specs.some((spec) => spec.id === 'pump-curve')) {
+      requestAnimationFrame(() => {
+        pumpCurveChart.resize();
+        pumpCurveChart.refresh();
+        sumpLevelChart.resize();
+        sumpLevelChart.refresh();
+      });
+    }
+    if (specs.some((spec) => spec.id === 'drill-compare')) {
+      requestAnimationFrame(() => {
+        drillCompare.resize();
+        drillCompare.refresh();
       });
     }
   },
@@ -1249,6 +1412,57 @@ else login.show();
     result: (id: string, result: 'normal' | 'hazard', note = '') => {
       inspectionTasks = setTaskResult(inspectionTasks, id, result, operatorName, note);
       if (inspectionPage) inspectionPage.reload();
+    },
+  },
+  // 能耗分项
+  energy: {
+    get metrics() {
+      return currentEnergy();
+    },
+    get nodes() {
+      return meterTree(kpi, graphOfDesigner(designer).nodes, designs);
+    },
+  },
+  // 泵站监视
+  pumps: {
+    get stations() {
+      return currentPumps();
+    },
+    get metrics() {
+      return pumpKpi(currentPumps());
+    },
+    get overrides() {
+      return { ...pumpOverrides };
+    },
+    toggle: (id: string) => {
+      const pump = currentPumps()
+        .flatMap((station) => station.pumps)
+        .filter((item) => item.id === id)[0];
+      pumpOverrides = { ...pumpOverrides, [id]: !(pump && pump.running) };
+      if (pumpPage) pumpPage.reload();
+    },
+    reset: () => {
+      pumpOverrides = {};
+      if (pumpPage) pumpPage.reload();
+    },
+  },
+  // 工况预案演练
+  drill: {
+    get planId() {
+      return drillPlanId;
+    },
+    get run() {
+      return currentDrill();
+    },
+    get metrics() {
+      return drillKpi(currentDrill());
+    },
+    get plans() {
+      return DRILL_PLANS;
+    },
+    select: (id: string) => {
+      drillPlanId = id;
+      if (drillPage) drillPage.reload();
     },
   },
   // 统一选择总线（端到端测试 / 调试入口）

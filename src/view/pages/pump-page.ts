@@ -1,0 +1,308 @@
+/**
+ * 页 —— 泵站监视。
+ *
+ * 厂内四台泵（进水泵 / 回流污泥泵 / 事故水回流泵 / 污泥螺杆泵）的**工况 + 特性 + 集水井液位**。
+ * 工况由业务流量按相似定律反推（转速 ∝ 流量、轴功率 ∝ 转速³），所以"图上流量一变，泵的转速、
+ * 效率、单位提升电耗全跟着变"；表里可以**人工投运/停运**备用泵，需求会在运行泵之间重新平摊。
+ */
+import { ICEButton, ICEStatCard, ICETable, ICETag, ICEWidget } from 'ice-web-components';
+import {
+  pumpKpi,
+  pumpRows,
+  SUMP_LEVEL_HIGH,
+  SUMP_LEVEL_LOW,
+  type PumpKpi,
+  type PumpStationData,
+} from '../../domain';
+import {
+  CARD_INSET,
+  PAGE_GAP,
+  PAGE_PADDING,
+  cardBodyRect,
+  createCard,
+  paragraph,
+  type PageContext,
+  type PageHandle,
+  type Rect,
+  type ShellLayout,
+} from '../shell';
+
+export type PumpPageDeps = {
+  stations: () => PumpStationData[];
+  /** 人工启停（入口持有 override） */
+  onToggle: (pumpId: string) => void;
+  /** 清空人工启停，恢复默认（工作泵转、备用泵停） */
+  onReset: () => void;
+  overrides: () => Record<string, boolean>;
+};
+
+export type PumpPageHandle = PageHandle & {
+  reload: () => void;
+  /** e2e 用 */
+  metrics: () => PumpKpi;
+};
+
+const STAT_HEIGHT = 96;
+const ISLAND_ROW_RATIO = 0.54;
+
+export function pumpCurveCardRect(layout: ShellLayout): Rect {
+  const x0 = layout.content.left + PAGE_PADDING;
+  const y0 = layout.content.top + PAGE_PADDING;
+  const row2Top = y0 + STAT_HEIGHT + PAGE_GAP;
+  const rest = layout.inner.height - STAT_HEIGHT - PAGE_GAP * 2;
+  const width = Math.round((layout.inner.width - PAGE_GAP) / 2);
+  return { left: x0, top: row2Top, width, height: Math.round(rest * ISLAND_ROW_RATIO) };
+}
+
+export function pumpCurveIslandRect(layout: ShellLayout): Rect {
+  return cardBodyRect(pumpCurveCardRect(layout));
+}
+
+export function sumpLevelCardRect(layout: ShellLayout): Rect {
+  const curve = pumpCurveCardRect(layout);
+  return { left: curve.left + curve.width + PAGE_GAP, top: curve.top, width: curve.width, height: curve.height };
+}
+
+export function sumpLevelIslandRect(layout: ShellLayout): Rect {
+  return cardBodyRect(sumpLevelCardRect(layout));
+}
+
+export function pumpTableCardRect(layout: ShellLayout): Rect {
+  const curve = pumpCurveCardRect(layout);
+  return {
+    left: curve.left,
+    top: curve.top + curve.height + PAGE_GAP,
+    width: layout.inner.width,
+    height: layout.inner.height - STAT_HEIGHT - curve.height - PAGE_GAP * 2,
+  };
+}
+
+export function buildPumpPage(ctx: PageContext, deps: PumpPageDeps): PumpPageHandle {
+  const { theme, layout } = ctx;
+  const x0 = layout.content.left + PAGE_PADDING;
+  const y0 = layout.content.top + PAGE_PADDING;
+
+  const page = new ICEWidget({
+    left: 0,
+    top: 0,
+    width: layout.content.width,
+    height: layout.content.height,
+    fill: false,
+    stroke: false,
+    interactive: false,
+  });
+
+  /* ---------------- 第一行：四个统计 ---------------- */
+  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 3) / 4);
+  const statConfigs = [
+    { title: '运行 / 备用', icon: '◎', trend: '泵组状态', type: 'primary' as const },
+    { title: '总提升流量', icon: '⇅', trend: '运行泵合计', type: 'info' as const },
+    { title: '单位提升电耗', icon: '◔', trend: 'kWh/千m³', type: 'success' as const },
+    { title: '今日启停', icon: '⏻', trend: '运行稳定度', type: 'warning' as const },
+  ];
+  const statCards = statConfigs.map((config, index) => {
+    const card = new ICEStatCard({
+      left: x0 + index * (statWidth + PAGE_GAP),
+      top: y0,
+      width: statWidth,
+      height: STAT_HEIGHT,
+      icon: config.icon,
+      title: config.title,
+      value: '0',
+      trend: config.trend,
+      trendType: config.type,
+    });
+    page.addChild(card, false);
+    return card;
+  });
+
+  /* ---------------- 第二行：两张图（岛） ---------------- */
+  const curveCard = createCard({
+    id: 'pump-curve-card',
+    rect: pumpCurveCardRect(layout),
+    title: '泵特性：效率与流量随转速变化',
+  });
+  page.addChild(curveCard, false);
+
+  const levelCard = createCard({
+    id: 'sump-level-card',
+    rect: sumpLevelCardRect(layout),
+    title: '集水井液位：高低报警线之间运行',
+  });
+  page.addChild(levelCard, false);
+
+  /* ---------------- 第三行：泵组表 ---------------- */
+  const tableRect = pumpTableCardRect(layout);
+  const pumpFor = (pumpId: string) =>
+    deps
+      .stations()
+      .flatMap((station) => station.pumps)
+      .filter((pump) => pump.id === pumpId)[0];
+
+  const table = new ICETable({
+    id: 'pump-table',
+    left: CARD_INSET,
+    top: 46,
+    width: tableRect.width - CARD_INSET * 2,
+    rowHeight: 34,
+    rowKey: 'id',
+    columns: [
+      { key: 'tag', title: '位号', width: 96 },
+      { key: 'name', title: '设备名称', width: 148 },
+      { key: 'station', title: '所属泵房', width: 126 },
+      { key: 'flow', title: '当前流量', width: 108, sorter: true },
+      { key: 'speed', title: '转速', width: 84, sorter: true },
+      { key: 'efficiency', title: '效率', width: 84 },
+      { key: 'power', title: '轴功率', width: 100, sorter: true },
+      { key: 'specific', title: '单位电耗', width: 108, sorter: true },
+      {
+        key: 'state',
+        title: '状态',
+        width: 84,
+        renderCell: (value: string, row: any) => {
+          const pump = pumpFor(String(row.id));
+          return new ICETag({
+            left: 0,
+            top: 6,
+            width: 68,
+            height: 22,
+            text: String(value),
+            status: pump && pump.running ? 'success' : 'info',
+            variant: 'soft',
+          });
+        },
+      },
+      {
+        key: 'action',
+        title: '人工启停',
+        width: 108,
+        renderCell: (value: string, row: any) => {
+          const cell = new ICEWidget({ left: 0, top: 0, width: 104, height: 30, fill: false, stroke: false, interactive: false });
+          const pump = pumpFor(String(row.id));
+          const button = new ICEButton({
+            id: `pump-toggle-${row.id}`,
+            left: 0,
+            top: 4,
+            width: 96,
+            height: 26,
+            text: pump && pump.running ? '停运' : '投运',
+            size: 'small',
+            variant: pump && pump.running ? 'default' : 'primary',
+          });
+          button.on('click', () => {
+            deps.onToggle(String(row.id));
+            reload();
+            ctx.toast(
+              `${pump ? pump.tag : row.id} 已${pump && pump.running ? '停运' : '投运'}，需求在运行泵之间重新平摊`
+            );
+          });
+          cell.addChild(button, false);
+          return cell;
+        },
+      },
+    ],
+    data: [],
+    summary: (rows: any[]) => ({
+      tag: `共 ${rows.length} 台`,
+      name: '合计',
+      flow: `${rows
+        .reduce((sum, row) => sum + Number(String(row.flow).replace(/[^\d.]/g, '') || 0), 0)
+        .toFixed(0)} m³/h`,
+      action: '',
+    }),
+    expandable: {
+      expandedRowHeight: 76,
+      render: (row: any, cellCtx: { width: number }) => {
+        const pump = pumpFor(String(row.id));
+        const wrap = new ICEWidget({
+          left: 0,
+          top: 0,
+          width: Math.max(200, cellCtx.width - 24),
+          height: 68,
+          fill: false,
+          stroke: false,
+          interactive: false,
+        });
+        if (!pump) return wrap;
+        wrap.addChild(
+          paragraph(ctx, {
+            left: 0,
+            top: 0,
+            width: wrap.state.width,
+            text: `介质 ${pump.medium} · 额定 ${pump.ratedFlow} m³/h / ${pump.ratedHead} m / ${pump.ratedPower} kW · 今日启停 ${pump.starts} 次 · 累计运行 ${pump.runtimeH.toFixed(1)} h`,
+            fontSize: 12,
+            color: theme.colors.text,
+          }),
+          false
+        );
+        return wrap;
+      },
+    },
+  });
+
+  const tableCard = createCard({
+    id: 'pump-table-card',
+    rect: tableRect,
+    title: '泵组清单（点行展开铭牌与今日运行；可人工投运 / 停运）',
+  });
+  tableCard.addChild(table, false);
+  page.addChild(tableCard, false);
+
+  /* ---------------- 刷新 ---------------- */
+  function reload(): void {
+    const stations = deps.stations();
+    const kpi = pumpKpi(stations);
+    statCards[0].setValue(`${kpi.running} / ${kpi.standby}`);
+    statCards[0].setTrend(`装机 ${kpi.ratedPower.toFixed(0)} kW · 当前 ${kpi.runningPower.toFixed(0)} kW`);
+    statCards[1].setValue(kpi.totalFlow.toFixed(0));
+    statCards[1].setTrend(`${kpi.totalFlow.toFixed(0)} m³/h（运行泵合计）`);
+    statCards[2].setValue(kpi.specificEnergy.toFixed(2));
+    statCards[2].setTrend('kWh/千m³（越低越省）');
+    statCards[3].setValue(String(kpi.startsToday));
+    statCards[3].setTrend(kpi.startsToday > 12 ? '启停偏多，注意调节' : '运行平稳');
+
+    table.setData(pumpRows(stations));
+    ctx.ice.dirty = true;
+  }
+
+  reload();
+
+  return {
+    node: page,
+    islands: [
+      { id: 'pump-curve', rect: pumpCurveIslandRect(layout) },
+      { id: 'sump-level', rect: sumpLevelIslandRect(layout) },
+    ],
+    actions: [
+      {
+        key: 'pump-reset',
+        label: '恢复默认泵组',
+        onClick: () => {
+          deps.onReset();
+          reload();
+          ctx.toast('泵组已恢复默认（工作泵运行、备用泵热备用）');
+        },
+      },
+    ],
+    statusTags: () => {
+      const kpi = pumpKpi(deps.stations());
+      return [
+        {
+          text: kpi.levelAlarm ? '液位越限' : '液位正常',
+          status: kpi.levelAlarm ? 'error' : 'success',
+          width: 108,
+        },
+        {
+          text: `最高液位 ${Math.round(kpi.worstLevel * 100)}%（高线 ${Math.round(SUMP_LEVEL_HIGH * 100)}% / 低线 ${Math.round(SUMP_LEVEL_LOW * 100)}%）`,
+          status: 'info',
+          width: 268,
+        },
+      ];
+    },
+    reload,
+    metrics: () => pumpKpi(deps.stations()),
+    refresh(): void {
+      reload();
+    },
+  };
+}

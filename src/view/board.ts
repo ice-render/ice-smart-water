@@ -200,6 +200,113 @@ export function assetHealthOption(
   } as ChartOption;
 }
 
+/** 能耗分项：各分项日耗电（柱）。 */
+export function energyMixOption(mix: { names: string[]; energy: number[] }): ChartOption {
+  return {
+    title: { text: '能耗分项', subtext: '按「装机 × 负载系数」摊分全厂日耗电' },
+    theme: 'light',
+    legend: { show: false },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '分项', data: mix.names },
+    yAxis: { name: '日耗电 kWh' },
+    animation: { enabled: true, duration: 440, easing: 'easeOutCubic' },
+    series: [{ id: 'energy', type: 'bar', name: '日耗电', data: mix.energy, barWidth: 0.5 }],
+  } as ChartOption;
+}
+
+/** 峰谷分摊：各时段电量（柱）+ 该时段电价（线，右轴）。 */
+export function tariffOption(bands: { names: string[]; energy: number[]; prices: number[] }): ChartOption {
+  return {
+    title: { text: '峰谷分摊', subtext: '三档各 8 小时 · 谷 / 平 / 峰' },
+    theme: 'light',
+    legend: { show: true, position: 'top' },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '时段', data: bands.names },
+    yAxis: [
+      { name: '电量 kWh' },
+      { name: '电价 元/kWh', position: 'right', min: 0, max: 1.2 },
+    ],
+    animation: { enabled: true, duration: 440, easing: 'easeOutCubic' },
+    series: [
+      { id: 'energy', type: 'bar', name: '电量', data: bands.energy, barWidth: 0.45 },
+      { id: 'price', type: 'line', name: '电价', yAxisIndex: 1, data: bands.prices, smooth: true, symbolSize: 6, lineWidth: 2 },
+    ],
+  } as ChartOption;
+}
+
+/** 泵的 Q-η 特性：横轴转速比、左轴效率、右轴流量。 */
+export function pumpCurveOption(curve: { speeds: number[]; efficiency: number[]; flow: number[] }): ChartOption {
+  return {
+    title: { text: '泵特性曲线', subtext: '相似定律：流量 ∝ n、扬程 ∝ n²、轴功率 ∝ n³' },
+    theme: 'light',
+    legend: { show: true, position: 'top' },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '转速比', data: curve.speeds.map((speed) => `${Math.round(speed * 100)}%`) },
+    yAxis: [
+      { name: '效率 %', min: 0, max: 100 },
+      { name: '流量 m³/h', position: 'right' },
+    ],
+    animation: { enabled: true, duration: 440, easing: 'easeOutCubic' },
+    series: [
+      { id: 'eta', type: 'line', name: '效率', data: curve.efficiency, smooth: true, symbolSize: 5, lineWidth: 2 },
+      { id: 'flow', type: 'line', name: '流量', yAxisIndex: 1, data: curve.flow, smooth: true, symbolSize: 5, lineDash: [5, 4] },
+    ],
+  } as ChartOption;
+}
+
+/** 集水井液位：面积 + 高 / 低报警线。 */
+export function sumpLevelOption(
+  series: number[],
+  options: { high: number; low: number }
+): ChartOption {
+  const labels = series.map((_, index) => `${index - series.length + 1}m`);
+  const percent = (value: number) => Math.round(value * 1000) / 10;
+  return {
+    title: { text: '集水井液位', subtext: '最近 60 分钟 · 液位占有效水深的百分比' },
+    theme: 'light',
+    legend: { show: true, position: 'top' },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '时间', data: labels },
+    yAxis: { name: '液位 %', min: 0, max: 100 },
+    animation: { enabled: true, duration: 380, easing: 'linear' },
+    series: [
+      {
+        id: 'level',
+        type: 'area',
+        name: '液位',
+        data: series.map(percent),
+        smooth: 0.25,
+        areaOpacity: 0.2,
+        lineWidth: 2,
+      },
+      { id: 'high', type: 'line', name: '高液位', data: series.map(() => percent(options.high)), lineDash: [6, 4], lineWidth: 1.5, symbolSize: 0 },
+      { id: 'low', type: 'line', name: '低液位', data: series.map(() => percent(options.low)), lineDash: [6, 4], lineWidth: 1.5, symbolSize: 0 },
+    ],
+  } as ChartOption;
+}
+
+/** 预案对比：横轴 = 指标、两条柱 = 基线 / 预案（值 = 达标度 %）。 */
+export function drillCompareOption(compare: { names: string[]; before: number[]; after: number[] }): ChartOption {
+  return {
+    title: { text: '达标度对比', subtext: '100% = 正好压线 · 越高越有余量' },
+    theme: 'light',
+    legend: { show: true, position: 'top' },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '指标', data: compare.names },
+    yAxis: { name: '达标度 %', min: 0 },
+    animation: { enabled: true, duration: 440, easing: 'easeOutCubic' },
+    series: [
+      { id: 'before', type: 'bar', name: '当前参数', data: compare.before, barWidth: 0.35 },
+      { id: 'after', type: 'bar', name: '预案参数', data: compare.after, barWidth: 0.35 },
+    ],
+  } as ChartOption;
+}
+
 /** 巡检路线到位情况：计划 / 已巡 / 超时（三条路线分组柱）。 */
 export function inspectionRouteOption(stats: {
   routes: string[];
