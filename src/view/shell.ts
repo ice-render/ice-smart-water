@@ -1,6 +1,6 @@
 /**
  * 画布化外壳 —— 对齐 `ice-web-components/examples/admin.html` 的设计语言：
- * 侧栏（`ICEMenu`）+ 顶栏（标题 / 面包屑 / 状态标签 / 操作按钮）+ 内容区（`ICECard` 栅格），
+ * 侧栏（**域**导航 `ICEMenu`）+ 顶栏（标题 / **当前域 + 该域页签** / 状态标签 / 操作按钮）+ 内容区（`ICECard` 栅格），
  * **全部由 ice-web-components 画在同一张画布上**。页面靠 `display` 切换，不销毁重建。
  *
  * 与 admin.html 的两点差异（都是有意的）：
@@ -12,7 +12,6 @@
 import { ICE } from 'ice-render';
 import {
   ICEAvatar,
-  ICEBreadcrumb,
   ICEButton,
   ICECard,
   ICEFloatButton,
@@ -23,6 +22,7 @@ import {
   ICEMenu,
   ICENotification,
   ICEPanel,
+  ICESegmented,
   ICESeparator,
   ICETag,
   ICEWidget,
@@ -52,6 +52,19 @@ export type ShellMenuItem = {
   label: string;
   iconPath?: string;
   children?: Array<{ key: string; label: string }>;
+};
+
+/**
+ * 导航的「域」：**侧栏列域，顶栏的页签分段控件列该域下的页**。
+ *
+ * 为什么分两级：页签多了以后侧栏一屏放不下（`ICEMenu` 没有滚动）。域只是**导航分组** ——
+ * `pages` 仍是一张扁平表，`shell.show(pageKey)` 会自动定位到它所属的域、切过去并高亮页签。
+ */
+export type ShellDomain = {
+  key: string;
+  label: string;
+  iconPath?: string;
+  pages: Array<{ key: string; label: string }>;
 };
 
 export type HeaderActionSpec = {
@@ -117,8 +130,16 @@ export type ShellHandle = {
   layout: ShellLayout;
   /** 当前页 key */
   current: () => string;
-  /** 切页（会同步侧栏选中、标题、面包屑、顶栏按钮与岛的显隐） */
+  /** 当前域 key */
+  currentDomain: () => string;
+  /**
+   * 切页：先定位到它所属的**域**（侧栏高亮跟着走），再切页签、标题、顶栏按钮与岛的显隐。
+   */
   show: (key: string) => void;
+  /** 切域：跳到该域**上次停留的页**（没有则第一页） */
+  showDomain: (key: string) => void;
+  /** 导航域定义（只读；测试 / 调试据此按页 key 反查所属域） */
+  domains: () => ShellDomain[];
   /** 重排当前页（动态文案改完用它；岛的位置会一并跟着走） */
   refresh: () => void;
   /**
@@ -158,7 +179,14 @@ export type ShellOptions = {
   messageOverlay?: HTMLCanvasElement;
   brand: string;
   brandSub: string;
+  /**
+   * 导航的「域」列表。外壳据此**自动生成侧栏的域项**（域项 + 下面的 `menu` 拼成完整侧栏菜单），
+   * 以及顶栏那个「本域页签」分段控件。
+   */
+  domains: ShellDomain[];
+  /** 侧栏里**域项之外**的菜单项（都是动作类：切工况 / 筛符号 / 重载案例 / 退出登录） */
   menu: ShellMenuItem[];
+  /** 初始页 key（外壳据此决定侧栏高亮哪个域、页签选哪一格） */
   selectedKey: string;
   /**
    * 侧栏**父项**展开 / 收起时的回调。
@@ -168,6 +196,13 @@ export type ShellOptions = {
    */
   onMenuExpand?: (key: string, expanded: boolean) => void;
   onMenuSelect: (key: string, item: any) => void;
+  /**
+   * 切页**之后**调用 —— **页签点击与 `shell.show()` 都会走这里**。
+   *
+   * 页签是外壳内部直接调 `show()` 的，不经过 `onMenuSelect`；所以"切页后要做的事"
+   * （重算业务状态、某页的一次性动作如 `fitViewport`）必须挂在这里，否则从页签切页会漏掉。
+   */
+  onPageShow?: (key: string) => void;
   pages: ShellPage[];
   /** 侧栏底部署名 */
   footer?: { avatar: string; name: string; role: string };
@@ -318,13 +353,22 @@ export function mountShell(options: ShellOptions): ShellHandle {
     ice.dirty = true;
   }
 
+  /** 域定义 + 「页 key → 所属域」反查（`show(pageKey)` 靠它自动切域） */
+  const domains: ShellDomain[] = options.domains || [];
+  const domainOfPage = (pageKey: string): ShellDomain | null =>
+    domains.filter((domain) => domain.pages.some((page) => page.key === pageKey))[0] || null;
+  /** 侧栏菜单 = **域项**（导航）+ 调用方给的域外项（动作：切工况 / 筛符号 / 重载 / 退出） */
+  const menuItems: ShellMenuItem[] = [
+    ...domains.map((domain) => ({ key: domain.key, label: domain.label, iconPath: domain.iconPath })),
+    ...(options.menu || []),
+  ];
   const menu = new ICEMenu({
     id: 'menu',
     left: 16,
     top: 92,
     width: 232,
-    items: options.menu,
-    selectedKey: options.selectedKey,
+    items: menuItems,
+    selectedKey: (domainOfPage(options.selectedKey) || domains[0] || { key: '' }).key,
     style: { fillStyle: theme.colors.surface },
     onSelect: (item: any) => options.onMenuSelect(item.key, item),
     onExpand: (key: string, expanded: boolean) => {
@@ -360,16 +404,49 @@ export function mountShell(options: ShellOptions): ShellHandle {
     text: '',
     style: { fontSize: 18, fontWeight: '600', fillStyle: theme.colors.text },
   });
-  const breadcrumb = new ICEBreadcrumb({
-    id: 'breadcrumb',
+  /**
+   * 顶栏第二行 = 两级导航的落脚点：左边是当前**域**名，右边是该域的**页签**（`ICESegmented`）。
+   *
+   * 放在顶栏（而不是新加一条子栏）：顶栏 64px 的第二行本来就是空的（原面包屑位置），
+   * 这样**不用改内容区高度** —— 否则所有页面的卡片 rect 与岛的洞都要跟着下移。
+   */
+  const domainLabel = new ICELabel({
+    id: 'domain-label',
     left: 56,
     top: 36,
-    width: 260,
-    fontSize: 11,
-    items: [{ label: '首页' }, { label: '工艺流程图' }],
+    width: 96,
+    height: 22,
+    verticalAlign: 'middle',
+    text: '',
+    style: { fontSize: 12, fontWeight: '600', fillStyle: theme.colors.textSecondary },
   });
-  header.addChildren([hamburger, pageTitle, breadcrumb]);
+  header.addChildren([hamburger, pageTitle, domainLabel]);
   ice.addChild(header);
+
+  /**
+   * 当前域的页签。**换域时重建**（`ICESegmented` 的 options 只在构造期读一次，没有 setOptions），
+   * 同域内切页只 `setValue()` 改高亮。
+   */
+  const PAGE_TABS_LEFT = 168;
+  const PAGE_TABS_TOP = 31;
+  const PAGE_TABS_HEIGHT = 28;
+  let pageTabs: any = null;
+  function renderPageTabs(domain: ShellDomain, activePage: string): void {
+    if (pageTabs && pageTabs.parentNode === header) header.removeChild(pageTabs);
+    const count = Math.max(1, domain.pages.length);
+    pageTabs = new ICESegmented({
+      id: 'page-tabs',
+      left: PAGE_TABS_LEFT,
+      top: PAGE_TABS_TOP,
+      width: Math.min(420, Math.max(96, count * 96)),
+      height: PAGE_TABS_HEIGHT,
+      options: domain.pages.map((page) => ({ value: page.key, label: page.label })),
+      value: activePage,
+      onChange: (value: string) => show(value),
+    });
+    header.addChild(pageTabs);
+    ice.dirty = true;
+  }
 
   /** 顶栏右侧：状态标签 + 页级操作按钮（切页时重建） */
   let tagNodes: any[] = [];
@@ -464,6 +541,10 @@ export function mountShell(options: ShellOptions): ShellHandle {
   let currentKey = '';
   let currentPage: ShellPage | null = null;
   let currentHandle: PageHandle | null = null;
+  /** 当前域 key（v2 两级导航） */
+  let currentDomainKey = '';
+  /** 每个域上次停留的页（切域回来时回到原处，而不是永远跳第一页） */
+  const lastPageOfDomain: Record<string, string> = {};
 
   function collectIslands(): void {
     Object.keys(isles).forEach((key) => delete isles[key]);
@@ -475,6 +556,8 @@ export function mountShell(options: ShellOptions): ShellHandle {
   function show(key: string): void {
     const page = options.pages.filter((item) => item.key === key)[0];
     if (!page) throw new Error(`没有注册页面：${key}`);
+    const domain = domainOfPage(key);
+    if (!domain) throw new Error(`页面「${key}」没有归入任何域（检查 ShellOptions.domains）`);
     // 页面节点懒构建：建好之后一直挂着，靠 display 切换（与 admin.html 同策略）
     if (!pageNodes[key]) {
       const handle = page.build({ ice, theme, layout, toast, notify });
@@ -489,14 +572,31 @@ export function mountShell(options: ShellOptions): ShellHandle {
     currentKey = key;
     currentPage = page;
     currentHandle = pageNodes[key].handle;
+    // 两级导航：**换域才重建页签**，同域内切页只改高亮 + 选中的域项
+    if (currentDomainKey !== domain.key) {
+      renderPageTabs(domain, key);
+    } else if (pageTabs) {
+      pageTabs.setValue(key);
+    }
+    currentDomainKey = domain.key;
+    lastPageOfDomain[domain.key] = key;
+    domainLabel.setText(domain.label);
+    menu.setSelectedKey(domain.key);
     pageTitle.setText(page.label);
-    breadcrumb.setItems([{ label: '首页' }, { label: page.label }]);
-    menu.setSelectedKey(key);
     setActions((currentHandle && currentHandle.actions) || []);
     applyPageTags();
     collectIslands();
     if (options.onIslands) options.onIslands(Object.keys(isles).map((id) => ({ id, rect: isles[id] })));
     ice.dirty = true;
+    if (options.onPageShow) options.onPageShow(key);
+  }
+
+  /** 切域：跳到该域**上次停留的页**（没有则第一页）；已经是当前域就什么都不做。 */
+  function showDomain(key: string): void {
+    const domain = domains.filter((item) => item.key === key)[0];
+    if (!domain || !domain.pages.length) return;
+    if (currentDomainKey === key) return;
+    show(lastPageOfDomain[key] || domain.pages[0].key);
   }
 
   /** 取当前页声明的状态标签（页面没声明就清空） */
@@ -547,7 +647,10 @@ export function mountShell(options: ShellOptions): ShellHandle {
     theme,
     layout,
     current: () => currentKey,
+    currentDomain: () => currentDomainKey,
     show,
+    showDomain,
+    domains: () => domains.slice(),
     refresh,
     setStatusTags,
     setUser,

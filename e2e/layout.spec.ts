@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clickSubmenu, clickWidget, layoutAudit, login, pageOverflow } from './helpers';
+import { clickSubmenu, clickWidget, layoutAudit, login, openPage, pageOverflow, PAGES } from './helpers';
 
 /**
  * 版面体检 + 菜单反馈回归。
@@ -22,8 +22,6 @@ test.beforeEach(async ({ page }) => {
   await page.waitForTimeout(400);
   await login(page, { name: '体检员' });
 });
-
-const PAGES = ['process', 'data', 'live', 'calc', 'events', 'legend'];
 
 test('版面体检：六个页签都没有图元相交、没有图元冲出内容区', async ({ page }) => {
   for (const key of PAGES) {
@@ -70,8 +68,7 @@ test('菜单：父项也会跳到对应页 + 提示，二级项切工况后跳�
   expect(await page.evaluate(() => (window as any).__water.shell.current())).toBe('process');
 
   // 在别的页切工况：切完落到工艺流程图（阀位/指标在那里最直观）
-  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('events')");
-  await page.waitForTimeout(600);
+  await openPage(page, 'events');
   expect(await page.evaluate(() => (window as any).__water.shell.current())).toBe('events');
 
   await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('mode:rain')");

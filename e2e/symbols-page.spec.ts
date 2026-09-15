@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { canvasStats, clickCanvas, clickSubmenu, clickWidget, expectViewportInteractions, login } from './helpers';
+import { canvasStats, clickCanvas, clickSubmenu, clickWidget, expectViewportInteractions, login, openPage } from './helpers';
 
 /**
  * 符号库页（`index.html` 壳里的第三个页签）的端到端回归。
@@ -21,9 +21,8 @@ test.beforeEach(async ({ page }) => {
   await page.waitForTimeout(400);
   // 每个用例都是新上下文：sessionStorage 空的，所以先过登录门（走真实输入路径）
   await login(page, { name: '演示员 张三' });
-  // 单页应用：进应用后停在「工艺流程图」，先切到符号库页签
-  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('legend')");
-  await page.waitForTimeout(400);
+  // 单页应用：进应用后停在「工艺流程图」，先切到符号库页签（两级导航：域 → 页签）
+  await openPage(page, 'legend');
 });
 
 test('图例：31 种符号全部渲染，分类计数 12 / 4 / 13 / 2', async ({ page }) => {

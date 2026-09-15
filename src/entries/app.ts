@@ -49,6 +49,7 @@ import {
   mountShell,
   type IslandSpec,
   type PageContext,
+  type ShellDomain,
   type ShellLayout,
 } from '../view/shell';
 import { mountIsland, placeIslands, type IslandHandle } from '../view/islands';
@@ -627,7 +628,44 @@ function handleLegendAction(key: string): void {
   shell.toast(`已导出 SVG（${svg.length} 字节），画面已恢复`);
 }
 
-/* ================= 外壳（单页三页签） ================= */
+/* ================= 导航域（侧栏列域，顶栏列该域的页签） ================= */
+
+/**
+ * 两级导航：**侧栏列「域」，顶栏用页签切该域下的「页」**。
+ *
+ * 为什么分两级：页签多了以后侧栏一屏放不下（`ICEMenu` 没有滚动）。分两级后侧栏只剩几个域项
+ * + 几个动作项，永远放得下；以后新增业务场景只往域里加页，不动侧栏。
+ */
+const NAV_DOMAINS: ShellDomain[] = [
+  {
+    key: 'craft',
+    label: '工艺',
+    iconPath: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+    pages: [
+      { key: 'process', label: '工艺流程图' },
+      { key: 'legend', label: '符号库' },
+      { key: 'calc', label: '工艺试算' },
+    ],
+  },
+  {
+    key: 'running',
+    label: '运行',
+    iconPath: 'M22 12h-4l-3 9L9 3l-3 9H2',
+    pages: [
+      { key: 'data', label: '运行数据' },
+      { key: 'live', label: '实时监视' },
+    ],
+  },
+  {
+    key: 'operation',
+    label: '运营',
+    iconPath: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
+    pages: [{ key: 'events', label: '事件中心' }],
+  },
+];
+const NAV_DOMAIN_KEYS = NAV_DOMAINS.map((domain) => domain.key);
+
+/* ================= 外壳 ================= */
 
 const shell = mountShell({
   canvas: need<HTMLCanvasElement>('canvas-shell'),
@@ -636,17 +674,9 @@ const shell = mountShell({
   brand: 'ice-smart-water',
   brandSub: '示范厂 10 万 m³/d · AAO + 混凝沉淀 + 滤布滤池 + 消毒 · 执行 GB 18918-2002 一级 A',
   footer: { avatar: 'SW', name: '示范厂 WWTP-100K', role: '智慧水务运行控制台' },
+  domains: NAV_DOMAINS,
+  // 侧栏里**域项之外**的项都是动作类（切工况 / 筛符号 / 重载 / 退出登录）
   menu: [
-    { key: 'process', label: '工艺流程图', iconPath: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z' },
-    { key: 'data', label: '运行数据', iconPath: 'M3 3v18h18M7 15l4-5 3 3 5-7' },
-    { key: 'live', label: '实时监视', iconPath: 'M22 12h-4l-3 9L9 3l-3 9H2' },
-    { key: 'calc', label: '工艺试算', iconPath: 'M9 3H5a2 2 0 0 0-2 2v4m0 6v4a2 2 0 0 0 2 2h4m6 0h4a2 2 0 0 0 2-2v-4m0-6V5a2 2 0 0 0-2-2h-4M7 12h10' },
-    { key: 'events', label: '事件中心', iconPath: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0' },
-    {
-      key: 'legend',
-      label: '符号库',
-      iconPath: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
-    },
     {
       key: 'mode',
       label: '运行工况',
@@ -719,7 +749,21 @@ const shell = mountShell({
       logout();
       return;
     }
+    // 域项：切到该域（回到该域上次停留的页）—— 切页后的收尾统一走 onPageShow
+    if (NAV_DOMAIN_KEYS.indexOf(key) >= 0) {
+      shell.showDomain(key);
+      return;
+    }
+    // 兜底：未知 key 当作页 key
     shell.show(key);
+  },
+  /**
+   * 切页后的收尾（**页签与侧栏都会走这里**）：重算业务状态 + 个别页的一次性动作。
+   *
+   * 以前这几行写在 `onMenuSelect` 末尾 —— 但页签是外壳**内部直接调 `show()`** 的，
+   * 不经过 `onMenuSelect`，挂在那里会让"从页签切页"漏掉重算与 fitViewport/applyScenario。
+   */
+  onPageShow: (key: string) => {
     recompute();
     if (key === 'legend') legendViewport.fitViewport();
     if (key === 'calc') applyScenario({ ...scenarioParams });

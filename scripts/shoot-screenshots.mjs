@@ -62,11 +62,27 @@ async function login(page, name = '演示用户') {
   await page.keyboard.type(name);
   await clickWidget(page, '#canvas-login', "window.__login.find('login-submit')");
   await page.waitForFunction(() => !window.__login.visible());
-  await page.waitForTimeout(500);
+  // 登录后会弹一条「欢迎，xxx」的顶部消息（3s）；截图不该带这种瞬时浮层，等它消失再拍
+  await page.waitForTimeout(3400);
 }
 
+/**
+ * 切页：两级导航 —— 先点侧栏的「域」，再点顶栏该域的**页签**。
+ * 页签在 `#page-tabs` 分段控件里，用组件自己的 `getSegmentNode(key)` 取到那一档的按钮节点。
+ */
 async function gotoPage(page, key) {
-  await clickWidget(page, '#canvas-shell', `window.__water.shell.find('menu').getItemNode('${key}')`);
+  const domain = await page.evaluate((k) => {
+    const shell = window.__water.shell;
+    const found = shell.domains().filter((d) => d.pages.some((p) => p.key === k))[0];
+    return found ? found.key : null;
+  }, key);
+  if (!domain) throw new Error(`没有域包含页「${key}」`);
+  const current = await page.evaluate(() => window.__water.shell.currentDomain());
+  if (current !== domain) {
+    await clickWidget(page, '#canvas-shell', `window.__water.shell.find('menu').getItemNode('${domain}')`);
+    await page.waitForTimeout(320);
+  }
+  await clickWidget(page, '#canvas-shell', `window.__water.shell.find('page-tabs').getSegmentNode('${key}')`);
   await page.waitForTimeout(900);
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { auditNotesCard, clickSubmenu, layoutAudit, login, pageOverflow } from './helpers';
+import { auditNotesCard, clickSubmenu, layoutAudit, login, PAGES, pageOverflow } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
@@ -21,7 +21,6 @@ test.beforeEach(async ({ page }) => {
  * 岛（DOM 画布）溢出、事件展开行这些路径完全没覆盖。这里一次性补上。
  */
 
-const PAGES = ['process', 'data', 'live', 'calc', 'events', 'legend'];
 const MODES = ['normal', 'rain', 'maintenance'];
 
 /** 每页的岛 → 宿主卡片映射（岛必须完整落在宿主卡片的正文区里，否则就是溢出/错位） */

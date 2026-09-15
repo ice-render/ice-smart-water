@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { auditNotesCard, clickCanvas, clickWidget, login } from './helpers';
+import { auditNotesCard, clickCanvas, clickWidget, login, openPage } from './helpers';
 
 /**
  * 统一单元选择总线（Plant Selection Bus）的端到端回归。
@@ -60,8 +60,7 @@ test('总线选中 → 工艺图高亮 + 右侧单元检视同步', async ({ pag
 });
 
 test('事件中心「定位」→ 跳工艺图并选中关联单元（跨视图）', async ({ page }) => {
-  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('events')");
-  await page.waitForTimeout(400);
+  await openPage(page, 'events');
 
   // 找一个「单元在图上、且「定位」按钮已渲染」的报警（取第一页第一条即可）
   const target = await page.evaluate(() => {
@@ -95,8 +94,7 @@ test('事件中心「定位」→ 跳工艺图并选中关联单元（跨视图�
 });
 
 test('符号库选中符号 → 工艺图上同类型真实单元一并被选中', async ({ page }) => {
-  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('legend')");
-  await page.waitForTimeout(400);
+  await openPage(page, 'legend');
 
   // 点一个在工艺图上确有实体的符号（曝气沉砂池 → 图上节点 grit）
   const cell = await page.evaluate(() => {

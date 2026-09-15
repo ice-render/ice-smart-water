@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { canvasStats, clickWidget, expectLoginCovers, login } from './helpers';
+import { canvasStats, clickWidget, expectLoginCovers, login, openPage } from './helpers';
 
 /**
  * 登录门（`water-editor.html` / `water-symbols.html` 共用同一套）。
@@ -174,8 +174,7 @@ test('整个系统只有一个 HTML：登录门之后是同一个壳，符号库
   );
 
   // 切到符号库页签，图例岛接管那块区域
-  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('legend')");
-  await page.waitForTimeout(400);
+  await openPage(page, 'legend');
   const legend = await page.evaluate(() => ({
     page: (window as any).__water.shell.current(),
     under: document.elementFromPoint(700, 300).id,

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { canvasStats, clickWidget, login } from './helpers';
+import { canvasStats, clickWidget, login, openPage } from './helpers';
 
 /**
  * 三张新页签的端到端回归：实时监视 / 工艺试算 / 事件中心。
@@ -22,11 +22,6 @@ test.beforeEach(async ({ page }) => {
   await page.waitForTimeout(400);
   await login(page, { name: '演示员 张三' });
 });
-
-const openPage = async (page: any, key: string) => {
-  await clickWidget(page, '#canvas-shell', `window.__water.shell.find('menu').getItemNode('${key}')`);
-  await page.waitForTimeout(900);
-};
 
 test('实时监视：采样在跑、曲线在长、仪表与热力图真的在画', async ({ page }) => {
   await openPage(page, 'live');

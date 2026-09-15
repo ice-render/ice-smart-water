@@ -7,6 +7,7 @@ import {
   expectViewportInteractions,
   islandRect,
   login,
+  openPage,
   widgetWorldRect,
 } from './helpers';
 
@@ -124,7 +125,7 @@ test('运行指标：水量平衡 / 污泥平衡 / 能耗都落在工程常规�
 });
 
 test('侧栏菜单（画布控件）：点「运行数据」切页，看板岛出现并画出 24 点曲线', async ({ page }) => {
-  await clickWidget(page, '#canvas-shell', "window.__water.shell.find('menu').getItemNode('data')");
+  await openPage(page, 'data');
   const state = await page.evaluate(() => {
     const water = (window as any).__water;
     const chart = water.board.chart;

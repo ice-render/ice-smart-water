@@ -14,6 +14,14 @@ import { expect, type Page } from '@playwright/test';
  *    直接挂在 `ICE` 实例上的组件 `parentNode` 是空的，用 parentNode 判终止会漏掉那一层偏移。
  */
 
+/**
+ * 全部页签 key —— **单一数据源**。
+ *
+ * 版面体检 / 全量审计 / 截图脚本都从这里取，别再各自写一份字面量数组
+ * （以前散在 `layout.spec.ts` 与 `audit-all.spec.ts`，新增页签必漏一处）。
+ */
+export const PAGES = ['process', 'data', 'live', 'calc', 'events', 'legend'];
+
 export type CanvasStats = {
   width: number;
   height: number;
@@ -92,7 +100,7 @@ export async function clickCanvas(page: Page, selector: string, x: number, y: nu
  * 算一个画布组件的**世界中心**（相对画布左上角），再换算成页面坐标。
  *
  * `expression` 是**在浏览器里**求值的表达式（纯 JS，不能带 TS 类型断言），
- * 例如 `window.__water.shell.find('menu').getItemNode('data')`。
+ * 例如 `window.__water.shell.find('page-tabs').getSegmentNode('data')`（页签那一档的按钮节点）。
  */
 export async function componentCenter(
   page: Page,
@@ -125,6 +133,29 @@ export async function clickWidget(page: Page, selector: string, expression: stri
   const center = await componentCenter(page, selector, expression);
   await page.mouse.click(center.x, center.y);
   await page.waitForTimeout(280);
+}
+
+/**
+ * 切到一个页签 —— **两级导航：先点侧栏的「域」，再点顶栏该域的页签**。
+ *
+ * 页签在顶栏的 `ICESegmented`（id `page-tabs`）里，每一档是一个按钮子节点，
+ * 用组件自己的 `getSegmentNode(value)` 拿到它再按画布坐标点（真鼠标事件）。
+ * 目标页已在当前域时跳过第一步。
+ */
+export async function openPage(page: Page, key: string): Promise<void> {
+  const target = await page.evaluate((k) => {
+    const shell = (window as any).__water.shell;
+    const domain = shell.domains().filter((d: any) => d.pages.some((p: any) => p.key === k))[0];
+    return domain ? { domain: domain.key } : null;
+  }, key);
+  expect(target, `没有域包含页「${key}」（检查 ShellOptions.domains）`).not.toBeNull();
+  const currentDomain = await page.evaluate(() => (window as any).__water.shell.currentDomain());
+  if (currentDomain !== (target as any).domain) {
+    await clickWidget(page, '#canvas-shell', `window.__water.shell.find('menu').getItemNode('${(target as any).domain}')`);
+    await page.waitForTimeout(320);
+  }
+  await clickWidget(page, '#canvas-shell', `window.__water.shell.find('page-tabs').getSegmentNode('${key}')`);
+  await page.waitForTimeout(900);
 }
 
 /** 一个画布组件在**画布坐标系**里的矩形（累加父链的 left/top） */
