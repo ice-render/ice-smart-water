@@ -16,6 +16,7 @@ import {
   PAGE_PADDING,
   cardBodyRect,
   createCard,
+  createStatRow,
   paragraph,
   sectionHeading,
   type PageContext,
@@ -114,12 +115,11 @@ export function buildLivePage(
   /* ---------------- 第一行：实时读数卡 ---------------- */
   const titles = ['进水流量', '溶解氧', '污泥浓度', '出水氨氮', '出水 COD', '风机振动'];
   const icons = ['〜', '◉', '◎', '◈', '◈', '⌁'];
-  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 5) / 6);
+  // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
+  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 6, gap: PAGE_GAP });
+  page.addChild(statRow, false);
   const statCards: ICEStatCard[] = titles.map((title, index) => {
     const card = new ICEStatCard({
-      left: x0 + index * (statWidth + PAGE_GAP),
-      top: y0,
-      width: statWidth,
       height: STAT_HEIGHT,
       icon: icons[index],
       title,
@@ -127,7 +127,7 @@ export function buildLivePage(
       trend: '等待采样',
       trendType: 'info',
     });
-    page.addChild(card, false);
+    statRow.addChild(card, false);
     return card;
   });
 

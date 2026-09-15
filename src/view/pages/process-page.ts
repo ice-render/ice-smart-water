@@ -30,6 +30,7 @@ import {
   bullet,
   cardBodyRect,
   createCard,
+  createStatRow,
   emptyBox,
   paragraph,
   sectionHeading,
@@ -115,7 +116,9 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
   const page = new ICEWidget({ left: 0, top: 0, width: layout.content.width, height: layout.content.height, fill: false, stroke: false, interactive: false });
 
   /* ---------------- 第一行：五张统计卡 ---------------- */
-  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 4) / 5);
+  // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
+  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 5, gap: PAGE_GAP });
+  page.addChild(statRow, false);
   const stats = [
     { icon: '〜', title: '进水流量', trendType: 'info' },
     { icon: '◈', title: '出水水质', trendType: 'success' },
@@ -124,16 +127,13 @@ export function buildProcessPage(ctx: PageContext, deps: ProcessPageDeps): PageH
     { icon: '⌁', title: '生物池泥龄', trendType: 'info' },
   ].map((cfg, index) =>
     new ICEStatCard({
-      left: x0 + index * (statWidth + PAGE_GAP),
-      top: y0,
-      width: statWidth,
       height: STAT_HEIGHT,
       value: '—',
       trend: '',
       ...cfg,
     })
   );
-  stats.forEach((card) => page.addChild(card, false));
+  stats.forEach((card) => statRow.addChild(card, false));
 
   /* ---------------- 左：工艺流程（岛挖在正文区） ---------------- */
   const graphRect: Rect = processGraphCardRect(layout);

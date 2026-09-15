@@ -161,3 +161,18 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 
 `ice-entity-designer/examples/water-editor.html` 与 `water-symbols.html` 仍然存在（上游 e2e 依赖它们），
 本仓的入口是**重写过的工程版**，不是那两个文件的镜像。上游改了示例页，本仓不需要跟着改。
+
+## 布局机制与依赖（2026-09-15 确立）
+
+- **统计卡一行用引擎的等分网格**：`createStatRow()`（`src/view/shell.ts`）返回一个持有
+  `ICEGridLayout({ cols, cellSizing: 'equal' })` 的行容器，卡片加进去即可 —— 不要再在页面里写
+  `statWidth = floor((inner.width - gap*(n-1))/n)` 与 `left = x0 + index*(statWidth+gap)`。
+  卡片的宽度与位置由布局算，卡片**内部**由 `ICEStatCard` 自持策略跟随（`ice-web-components` 1.9.2 起）。
+- **精确构图（卡片 rect / 岛）继续用坐标**：`computeLayout()` 给的设计矩形是仪表盘构图语义，
+  不要硬套布局器。
+- **不要 `file:` 链接组件库**：`ice-web-components` 自带 peer 解析，`file:` 链接会让
+  `node_modules/ice-web-components/node_modules/ice-render` 出现**第二份引擎实例** ——
+  类型上 `ICEGridLayout` 与库的 `ICELayoutManager` 互不兼容（`Types have separate declarations
+  of a private property`）。做法：**依赖已发布版本**（`"ice-web-components": "^1.9.2"`），
+  引擎仍可用 `file:../ice-render`（它是 peer，会解析到应用这一份）；若安装后又出现嵌套副本，
+  跑一次 `npm dedupe`。

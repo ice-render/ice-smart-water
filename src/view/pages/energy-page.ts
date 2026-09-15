@@ -13,6 +13,7 @@ import {
   PAGE_PADDING,
   cardBodyRect,
   createCard,
+  createStatRow,
   paragraph,
   type PageContext,
   type PageHandle,
@@ -82,7 +83,9 @@ export function buildEnergyPage(ctx: PageContext, deps: EnergyPageDeps): EnergyP
   });
 
   /* ---------------- 第一行：五个统计 ---------------- */
-  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 4) / 5);
+  // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
+  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 5, gap: PAGE_GAP });
+  page.addChild(statRow, false);
   const statConfigs = [
     { title: '日耗电', icon: '⚡', trend: '全厂 kWh/d', type: 'primary' as const },
     { title: '吨水电耗', icon: '◔', trend: 'kWh/m³', type: 'info' as const },
@@ -92,9 +95,6 @@ export function buildEnergyPage(ctx: PageContext, deps: EnergyPageDeps): EnergyP
   ];
   const statCards = statConfigs.map((config, index) => {
     const card = new ICEStatCard({
-      left: x0 + index * (statWidth + PAGE_GAP),
-      top: y0,
-      width: statWidth,
       height: STAT_HEIGHT,
       icon: config.icon,
       title: config.title,
@@ -102,7 +102,7 @@ export function buildEnergyPage(ctx: PageContext, deps: EnergyPageDeps): EnergyP
       trend: config.trend,
       trendType: config.type,
     });
-    page.addChild(card, false);
+    statRow.addChild(card, false);
     return card;
   });
 

@@ -14,6 +14,7 @@ import {
   PAGE_PADDING,
   cardBodyRect,
   createCard,
+  createStatRow,
   paragraph,
   sectionHeading,
   type PageContext,
@@ -91,7 +92,9 @@ export function buildDrillPage(ctx: PageContext, deps: DrillPageDeps): DrillPage
   });
 
   /* ---------------- 第一行：四个统计 ---------------- */
-  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 3) / 4);
+  // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
+  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 4, gap: PAGE_GAP });
+  page.addChild(statRow, false);
   const statConfigs = [
     { title: '预案达标', icon: '✔', trend: '按验收口径', type: 'success' as const },
     { title: '达标率', icon: '◔', trend: '达标条数 / 总条数', type: 'primary' as const },
@@ -100,9 +103,6 @@ export function buildDrillPage(ctx: PageContext, deps: DrillPageDeps): DrillPage
   ];
   const statCards = statConfigs.map((config, index) => {
     const card = new ICEStatCard({
-      left: x0 + index * (statWidth + PAGE_GAP),
-      top: y0,
-      width: statWidth,
       height: STAT_HEIGHT,
       icon: config.icon,
       title: config.title,
@@ -110,7 +110,7 @@ export function buildDrillPage(ctx: PageContext, deps: DrillPageDeps): DrillPage
       trend: config.trend,
       trendType: config.type,
     });
-    page.addChild(card, false);
+    statRow.addChild(card, false);
     return card;
   });
 

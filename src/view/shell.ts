@@ -9,7 +9,7 @@
  *    整个场景一起位移，图表库自己 new 一个引擎），所以它们是**独立画布**，按外壳坐标绝对定位、
  *    嵌在卡片的"洞"里。见 `islands.ts`。
  */
-import { ICE } from 'ice-render';
+import { ICE, ICEGridLayout } from 'ice-render';
 import {
   ICEAvatar,
   ICEButton,
@@ -220,6 +220,48 @@ export type ShellOptions = {
 };
 
 /** 内容区尺寸：铺满画布，去掉侧栏与顶栏 */
+
+/**
+ * 统计卡**一行**（等宽 + 等间距）。
+ *
+ * 老写法在每个页面里手算：`statWidth = floor((inner.width - gap*(n-1))/n)`，
+ * 再 `left = x0 + index * (statWidth + gap)` —— 同一段算术散落在 11 个页面里，
+ * 改行宽/卡数就要逐页改公式。这里交给引擎的**等分网格**：行容器持有
+ * `ICEGridLayout({ cols, cellSizing: 'equal' })`，卡片的宽度由布局算、加卡删卡自动重排；
+ * 卡片内部（见 `ICEStatCard` 的自持策略）也会跟着自己的尺寸走。
+ *
+ * 行容器的盒子仍来自本页的设计矩形（`layout.inner`），精确构图的语义不变。
+ */
+export function createStatRow(options: {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** 卡片数量（等分列数） */
+  count: number;
+  /** 列间距 */
+  gap: number;
+}): ICEWidget {
+  const row = new ICEWidget({
+    left: options.left,
+    top: options.top,
+    width: options.width,
+    height: options.height,
+    fill: false,
+    stroke: false,
+    interactive: false,
+  });
+  row.setLayout(
+    new ICEGridLayout({
+      cols: Math.max(1, Math.floor(options.count) || 1),
+      gapX: options.gap,
+      gapY: 0,
+      cellSizing: 'equal',
+    })
+  );
+  return row;
+}
+
 export function computeLayout(canvasWidth: number, canvasHeight: number, rightWidth = 360): ShellLayout {
   const width = Math.max(canvasWidth, MIN_CANVAS_WIDTH);
   const height = Math.max(canvasHeight, MIN_CANVAS_HEIGHT);

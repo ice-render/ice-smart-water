@@ -21,6 +21,7 @@ import {
   bullet,
   cardBodyRect,
   createCard,
+  createStatRow,
   paragraph,
   sectionHeading,
   type PageContext,
@@ -87,21 +88,20 @@ export function buildLegendPage(
   /* ---------------- 分类统计 ---------------- */
   const stats = categoryStats();
   // 5 张卡（符号总数 + 4 个分类）：列宽必须按 5 列算 —— 按 4 列算会让第 5 张冲出画布右边
-  const statWidth = Math.floor((layout.inner.width - PAGE_GAP * 4) / 5);
+  // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
+  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 5, gap: PAGE_GAP });
+  page.addChild(statRow, false);
   const statCards = [
     { icon: '⊞', title: '符号总数', value: String(stats.reduce((total, item) => total + item.count, 0)), trend: `${SYMBOL_CATEGORIES.length} 个分类` },
     ...stats.map((item) => ({ icon: '◫', title: item.label, value: String(item.count), trend: item.description })),
   ].map((cfg, index) =>
     new ICEStatCard({
-      left: x0 + index * (statWidth + PAGE_GAP),
-      top: y0,
-      width: statWidth,
       height: STAT_HEIGHT,
       trendType: 'info',
       ...cfg,
     })
   );
-  statCards.forEach((card) => page.addChild(card, false));
+  statCards.forEach((card) => statRow.addChild(card, false));
 
   /* ---------------- 左：符号图例（岛） ---------------- */
   const legendRect: Rect = legendCardRect(layout);
