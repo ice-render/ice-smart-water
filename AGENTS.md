@@ -115,6 +115,27 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 （2026-09-14，已双推），应用侧在 `ShellOptions.onMenuExpand` 里接住：
 点父项就跳到该组最相关的那一页并给提示；切工况后跳到工艺流程图（阀位与指标在那里最直观）。
 
+## 启动遮罩（2026-09-15 确立）
+
+**"加载中"这件事只能由 HTML/CSS 表达，不能画在画布上** —— 首屏要下载 + 解析 + 执行约 1.4MB 的包
+（四个家族包内联，见 webpack 输出），**包跑起来之前画布上一个像素也画不出来**。
+
+没有遮罩时用户先看到的是 `canvas` 的默认尺寸 **300×150**（`index.html` 里的 canvas 既没写
+`width/height` 属性、也没给 CSS 尺寸）—— 也就是左上角那个突兀的白色圆角矩形。
+实测（1.6Mbps + 4× CPU 降速）：**7.5 秒**才出登录门，期间一直是那个矩形。
+
+三条口径：
+
+1. 遮罩本体在 `public/index.html`（纯 HTML/CSS + 一行内联脚本），**不依赖 bundle**；
+   `body.is-booting` 期间连 `.app` 一起 `visibility: hidden`（否则遮罩没盖上时仍会露出那个矩形）。
+2. 撤下时机：应用**首帧之后**（`src/entries/app.ts` 启动段的嵌套 `requestAnimationFrame` →
+   `hideBootOverlay()`，见 `src/view/boot-overlay.ts`）。早一帧撤会闪一瞬空白。
+3. 遮罩 **`pointer-events: none`**：加载期间本来没有可点的东西，而拦点击会让 e2e 的画布坐标点击
+   与 `elementFromPoint` 命中断言全部落空（"遮罩盖住登录画布"这类断言会假红）。
+
+回归：`e2e/boot-overlay.spec.ts`（加载期间必须看到遮罩 + 裸 canvas 必须不可见；就绪后遮罩必须撤下并摘出 DOM）。
+加载明显偏慢（>6s）时文案会换成"首次加载需要解析约 1.4MB 引擎与组件库…"，这句也在这条口径里。
+
 ## 踩过的坑（改之前先看）
 
 - **多份 `ice-render`**：每个兄弟包的 `node_modules` 里都有一份自己装的 `ice-render`（版本可能不同）。
