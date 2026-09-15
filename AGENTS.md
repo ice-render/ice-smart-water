@@ -128,8 +128,11 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 
 1. 遮罩本体在 `public/index.html`（纯 HTML/CSS + 一行内联脚本），**不依赖 bundle**；
    `body.is-booting` 期间连 `.app` 一起 `visibility: hidden`（否则遮罩没盖上时仍会露出那个矩形）。
-2. 撤下时机：应用**首帧之后**（`src/entries/app.ts` 启动段的嵌套 `requestAnimationFrame` →
-   `hideBootOverlay()`，见 `src/view/boot-overlay.ts`）。早一帧撤会闪一瞬空白。
+2. 撤下时机：**等"接下来会露出来的那一层"真正画完一帧**——`hideBootOverlayWhenPainted(ice)`
+   （`src/view/boot-overlay.ts`）以 `ice.dirty === false` 为信号（渲染器每跑完一轮都会清它），
+   登录态决定等登录门的 ICE 还是外壳的 ICE，60 帧兜底。
+   **不要用"第 N 帧之后"这种固定时机**：启动段里 `recompute()`（建 12 个页签内容）会占住主线程几百毫秒，
+   而登录门/外壳各有独立画布、并不需要等它 —— 固定早撤会露出白页，固定晚撤会白等（本地实测多等 0.7s）。
 3. 遮罩 **`pointer-events: none`**：加载期间本来没有可点的东西，而拦点击会让 e2e 的画布坐标点击
    与 `elementFromPoint` 命中断言全部落空（"遮罩盖住登录画布"这类断言会假红）。
 
@@ -137,6 +140,20 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 加载明显偏慢（>6s）时文案会换成"首次加载需要解析约 1.4MB 引擎与组件库…"，这句也在这条口径里。
 
 ## 踩过的坑（改之前先看）
+
+### 代码分割：首屏只留登录门（2026-09-15 确立，先看这条）
+
+- **入口是 `src/entries/boot.ts`**：只 `import './login-boot'`（挂登录门 + 撤启动遮罩），
+  控制台（`src/entries/app.ts`：外壳 + 12 个页签 + 设计器 + 图表 + 案例数据）用 `import()` **异步**加载。
+- **为什么**：控制台那堆模块（实体设计器 194KB + 图表 281KB + 各页面）在用户登录之前**一个都用不上**，
+  却会占住首屏的下载、解析与执行。实测（1.6Mbps + 4× CPU 限速，gzip）：
+  **登录门 2.68s → 1.48s**（-45%），首屏 JS **1364KB → 771KB**，控制台 3.38s → 2.93s。
+- **接缝只有一个：登录提交**。用户在控制台就绪前点"登录"时，`login-boot` 先排队，
+  `setEnterApp()` 一注册就补进应用 —— **不要让用户再点一次**。
+- **约束**：入口 chunk 里**不许**出现设计器 / 图表 / `view/pages/*` 的静态 import（一出现就被拖回首屏）。
+  判据：`dist/` 下应有 `boot.*.js` + `console.*.js` 两个产物，且 boot 明显小于 console。
+- **回归**：`e2e/boot-overlay.spec.ts`（4 例）——启动遮罩两条 + **"控制台 chunk 加载不出来时登录门照样能起来"**
+  （钉住"首屏不依赖控制台"）+ **"弱网下先点登录、到货后自动进入"**（钉住排队那条路径）。
 
 - **多份 `ice-render`**：每个兄弟包的 `node_modules` 里都有一份自己装的 `ice-render`（版本可能不同）。
   `webpack.config.js` 用 `resolve.alias` 把四个包钉到同级仓库目录，否则会出现多份引擎实例，

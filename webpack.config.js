@@ -30,11 +30,14 @@ module.exports = (env, argv) => {
      * 工艺流程图 / 运行数据 / 符号库是壳里的三个页签，不是三个页面。
      */
     entry: {
-      app: path.resolve(__dirname, 'src/entries/app.ts'),
+      // 入口只挂登录门 + 启动遮罩；控制台（外壳 / 12 个页签 / 设计器 / 图表）是异步 chunk（见 boot.ts）
+      boot: path.resolve(__dirname, 'src/entries/boot.ts'),
     },
     output: {
       path: path.resolve(__dirname, 'dist'),
       filename: isProd ? '[name].[contenthash:8].js' : '[name].js',
+      // 异步 chunk（console）也要带内容哈希：改一版就换名，配合 Pages 的 max-age=600 也够用
+      chunkFilename: isProd ? '[name].[contenthash:8].js' : '[name].js',
       clean: true,
     },
     resolve: {
@@ -60,7 +63,7 @@ module.exports = (env, argv) => {
       new HtmlWebpackPlugin({
         template: path.resolve(__dirname, 'public/index.html'),
         filename: 'index.html',
-        chunks: ['app'],
+        chunks: ['boot'],
       }),
     ],
     // 打包进来的是四个库（引擎 + 图表 + 控件 + 设计器），体积天然大，别刷警告
