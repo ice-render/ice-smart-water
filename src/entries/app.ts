@@ -155,6 +155,7 @@ import {
 import { buildDrillPage, drillCompareIslandRect, type DrillPageHandle } from '../view/pages/drill-page';
 import { graphOfDesigner } from '../view/adapter';
 import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
+import { hideBootOverlay } from '../view/boot-overlay';
 
 function need<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -1281,6 +1282,9 @@ requestAnimationFrame(() => {
   viewport.sizeCanvas();
   viewport.fitViewport();
   recompute();
+  // 首帧之后再撤启动遮罩：多等一帧，确保外壳 / 登录门已经上屏（否则会看到一瞬空白）。
+  // 遮罩本身在 public/index.html 里（纯 HTML/CSS），见 src/view/boot-overlay.ts。
+  requestAnimationFrame(() => hideBootOverlay());
 });
 
 // 实时采样：进应用后才开始（登录门后面不必空跑）

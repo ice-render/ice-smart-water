@@ -65,9 +65,86 @@
         width: 100%;
         height: 100%;
       }
+      /* ===== 启动遮罩 =====
+         纯 HTML/CSS，**先于任何 JS 显示**：首屏要下载 + 解析 + 执行约 1.4MB 的包
+         （四个家族包内联），再加上开机就建 12 个页签的内容，冷启动要好几秒。
+         没有它的时候用户先看到的是 canvas 的**默认尺寸 300×150** —— 也就是左上角那个
+         突兀的白色圆角矩形（实测：1.6Mbps + 4× CPU 降速下要 7.5 秒才出登录门）。 */
+      #boot-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 100; /* 盖住外壳、登录层（20）与所有岛（15） */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #eef1f4; /* 与 body 同色：遮罩就是"页面还没画出来"的样子 */
+        /* 不拦点击：加载期间本来没有可点的东西；拦点击反而会让 e2e 里
+           「elementFromPoint 命中登录画布」这类断言失败 */
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+      }
+      body.is-booting #boot-overlay {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 0.25s ease;
+      }
+      /* 启动期间把应用整个藏起来：canvas 没写 width/height 属性时默认 300×150，
+         不藏就会先闪一个左上角的白色矩形（遮罩万一没盖上也不该露） */
+      body.is-booting .app {
+        visibility: hidden;
+      }
+      .boot-drop {
+        animation: boot-pulse 1.6s ease-in-out infinite;
+      }
+      .boot-spinner {
+        width: 34px;
+        height: 34px;
+        margin-top: 6px;
+        border: 3px solid rgba(13, 110, 253, 0.22);
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      .boot-title {
+        font-size: 17px;
+        font-weight: 600;
+        color: #212529;
+      }
+      .boot-status {
+        min-height: 20px;
+        font-size: 13px;
+        color: #6c757d;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes boot-pulse {
+        0%,
+        100% {
+          transform: translateY(0);
+          opacity: 0.85;
+        }
+        50% {
+          transform: translateY(-4px);
+          opacity: 1;
+        }
+      }
+      /* 无障碍：系统开了"减少动态效果"就不转 */
+      @media (prefers-reduced-motion: reduce) {
+        .boot-spinner,
+        .boot-drop {
+          animation: none;
+        }
+      }
     </style>
   </head>
-  <body>
+  <body class="is-booting">
     <div class="app">
       <canvas id="canvas-shell"></canvas>
       <canvas id="canvas-login"></canvas>
@@ -89,5 +166,23 @@
       <!-- 顶部消息专用的覆盖画布：在所有岛之上（见上面的 CSS） -->
       <canvas id="canvas-overlay"></canvas>
     </div>
+    <!-- 启动遮罩：纯 HTML/CSS，先于任何 JS 显示；由 app 在首帧之后撤下（src/view/boot-overlay.ts） -->
+    <div id="boot-overlay" role="status" aria-live="polite" aria-label="正在加载智慧水务运行控制台">
+      <svg class="boot-drop" width="44" height="44" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 3c5.2 6.2 9 10.6 9 15a9 9 0 0 1-18 0c0-4.4 3.8-8.8 9-15z" fill="#0d6efd" />
+      </svg>
+      <div class="boot-spinner" aria-hidden="true"></div>
+      <div class="boot-title">智慧水务运行控制台</div>
+      <div class="boot-status" id="boot-status">正在加载渲染引擎与组件库…</div>
+    </div>
+    <script>
+      // 加载明显偏慢时给一句解释（纯内联，不依赖 bundle）；是否可见由 body 的 class 决定
+      setTimeout(function () {
+        var status = document.getElementById('boot-status');
+        if (status && document.body.classList.contains('is-booting')) {
+          status.textContent = '首次加载需要解析约 1.4MB 渲染引擎与组件库，请稍候…';
+        }
+      }, 6000);
+    </script>
   </body>
 </html>
