@@ -36,26 +36,28 @@ export type ViewportHandle = {
 /**
  * 把 canvas 的像素尺寸与 CSS 尺寸都对齐到容器，并同步回引擎。
  *
- * 返回新的 CSS 尺寸（没变化时返回原尺寸）。
+ * 尺寸契约**整体交给引擎**：`ICE.fitCanvasToDisplaySize()`（ice-render 2.12.0 起新增）
+ * 负责 backing store × dpr、CSS 尺寸、`canvasWidth/Height`，以及命中矩形与内容盒的同步。
+ *
+ * 此前这里是手写的：直接给 `ice.canvasWidth/canvasHeight` 赋值、再手动刷一次矩形 ——
+ * 等于从外面改引擎的内部状态，而命中测试正是按这两个值算的。同样的逻辑 ice-chart 那边
+ * 也手写了一遍（而且用的是 border-box，画布带边框时会偏），两处都踩过坑。
+ * 现在只有一份实现，这里只负责"尺寸从哪个容器量"这一件应用层的事。
+ *
+ * 注意：本函数在 dpr=1 且画布无边框时与旧实现**数值等价**，是消除手写内部状态的重构，
+ * 不是行为修复。它的价值在于——以后谁把这个应用切到 HiDPI，不会再出现
+ * "引擎以为自己在 2× 渲染、画布却被写回 1×" 的静默错位。
+ *
+ * 返回容器测得的 CSS 尺寸（尺寸为 0 时原样返回 0，交给引擎退回画布自身尺寸）。
  */
 export function sizeCanvasToParent(canvas: HTMLCanvasElement, ice: any): { width: number; height: number } {
   const wrapper = canvas.parentElement;
   if (!wrapper) return { width: canvas.width, height: canvas.height };
-  const width = Math.max(1, Math.round(wrapper.clientWidth));
-  const height = Math.max(1, Math.round(wrapper.clientHeight));
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  if (ice) {
-    ice.canvasWidth = width;
-    ice.canvasHeight = height;
-    if (typeof ice.updateCanvasBoundingRect === 'function') {
-      ice.updateCanvasBoundingRect();
-    }
-  }
+  // 不再 `Math.max(1, …)`：容器尺寸为 0（页签隐藏 / 布局未就绪）时，引擎会退回画布自身的
+  // 显示尺寸并报告"未变化"，不会像旧实现那样先把画布写成 1×1、显示出来再重排一次。
+  const width = Math.round(wrapper.clientWidth);
+  const height = Math.round(wrapper.clientHeight);
+  ice.fitCanvasToDisplaySize(width, height);
   return { width, height };
 }
 
