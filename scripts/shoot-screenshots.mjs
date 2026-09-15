@@ -145,6 +145,21 @@ async function main() {
   await page.waitForTimeout(700);
   await shot(page, '07-legend.png');
 
+  // 8) 污泥产运（流程 + 联单）
+  await gotoPage(page, 'sludge');
+  await page.waitForTimeout(900);
+  await shot(page, '08-sludge.png');
+
+  // 9) 设备资产（健康度矩阵 + 台账）
+  await gotoPage(page, 'asset');
+  await page.waitForTimeout(900);
+  await shot(page, '09-asset.png');
+
+  // 10) 巡检管理（路线到位 + 任务）
+  await gotoPage(page, 'inspection');
+  await page.waitForTimeout(900);
+  await shot(page, '10-inspection.png');
+
   await browser.close();
 
   console.log('\n控制台错误数：', errors.length);

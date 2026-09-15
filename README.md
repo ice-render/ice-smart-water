@@ -8,7 +8,7 @@
 而是把家族四件套按同一个业务场景（一座 10 万 m³/d 的 AAO 市政污水厂）拼起来，
 只写「水务这门生意」的逻辑。看这一页能知道家族各件东西**怎么组合、边界在哪里**。
 
-### 1.1 一个入口、两级导航、六个页签
+### 1.1 一个入口、两级导航、九个页签
 
 整个系统**只有一个 HTML**（`index.html`）：所有功能都在同一张画布外壳里，切页时只把对应的「岛」
 摆出来（`display` 切换，不重新加载页面）。进应用先过**登录门**（见 [5](#5-登录门)）。
@@ -25,6 +25,9 @@
 | 运行 | **运行数据** | 24 小时进出水趋势 + 沿程水量与负荷 + 出水达标对照 + 运行审计 | 24 小时看板 | `ICETable` 分页/空态、`ice-chart` 双 y 轴 |
 | 运行 | **实时监视** | 模拟 SCADA 推送：6 个点位读数 + 三线滑动窗口趋势 + 溶解氧仪表 + 生化池分区热力图 | 趋势 / 仪表 / 热力图 | `appendData` 滑动窗口、`gauge`、`heatmap`、`ICESegmented`、`ICEButton` |
 | 运营 | **事件中心** | 报警工单闭环：多选批量派单 + 行展开看处置轨迹 + 二次确认 + 通知 | — | `ICETable`（多选/展开/汇总/列筛选/自定义单元格）、`ICETimeline`、`attachPopconfirm`、`ICENotification` |
+| 运营 | **污泥产运** | 污泥处理与处置：浓缩 → 脱水 → 泥饼外运，**转移联单**（签发 / 过磅 / 签收 / 归档）状态机与闭合率 | 污泥流程 | `ICETable` + 行展开 `ICETimeline`、`ICETag` 状态、`attachPopconfirm`；`ice-chart` 双轴（柱=湿泥量、线=含水率） |
+| 运营 | **设备资产** | 设备全生命周期台账：**34 台设备由图上单元派生**（型号 / 供应商 / 投运日 / 健康度 / 维保计划 / 备件齐套） | 健康度矩阵 | `ICETable` + 健康度分档标签 + 展开备件；`ice-chart` **heatmap**（装置分类 × 五个健康维度） |
+| 运营 | **巡检管理** | 巡检点位**由 `SYMBOL_CATALOG` 的「巡检要点」派生** → 三条路线 → 班次任务 → 到位率 / 隐患闭环 | 路线到位情况 | `ICETable` + 就地登记结论 + 展开详情；`ice-chart` 分组柱（计划 / 已巡 / 超时） |
 
 内容由 `ice-entity-designer` 的两个示例（`examples/water-editor.html` / `water-symbols.html`）
 迁移而来，但迁移后不再是两段写在 HTML 里的脚本，而是**一个工程里的六个页签**。
@@ -49,6 +52,14 @@
 **符号库**：31 种给排水符号图例
 
 ![符号库](screenshots/07-legend.png)
+
+| 污泥产运 | 设备资产 |
+|---|---|
+| ![污泥产运](screenshots/08-sludge.png) | ![设备资产](screenshots/09-asset.png) |
+
+**巡检管理**：三条路线 × 班次任务 × 隐患闭环
+
+![巡检管理](screenshots/10-inspection.png)
 
 ## 3. 家族能力怎么用（本仓与四件套的边界）
 
@@ -92,7 +103,7 @@ ice-web-components 画在同一张画布上**，页面里几乎没有 DOM ——
 
 ### 4.2 岛（island）= 独立画布 + 独立 `ICE` 实例
 
-DOM 里一共 **7 张岛画布**，按**外壳坐标**绝对定位，嵌在外壳卡片挖好的「洞」里
+DOM 里一共 **10 张岛画布**，按**外壳坐标**绝对定位，嵌在外壳卡片挖好的「洞」里
 （卡的正文区留空、岛画布透明底），视觉上就是「图长在卡里」：
 
 | 岛 | 所在页签 | 为什么必须独立 |
@@ -102,6 +113,9 @@ DOM 里一共 **7 张岛画布**，按**外壳坐标**绝对定位，嵌在外�
 | `island-live-trend` / `-gauge` / `-heat`（趋势 / 仪表 / 热力图） | 实时监视 | 三张 `ice-chart`，同上 |
 | `island-calc-curve`（试算曲线） | 工艺试算 | 一张 `ice-chart`，同上 |
 | `island-legend`（符号图例） | 符号库 | 同一套域设计器再挂一张画布，图例自身也要独立视口 |
+| `island-sludge-flow`（污泥流程） | 污泥产运 | `ice-chart` 双轴：湿泥量（柱）+ 含水率（线） |
+| `island-asset-health`（健康度矩阵） | 设备资产 | `ice-chart` **heatmap**：装置分类 × 五个健康维度 |
+| `island-inspection-route`（路线到位） | 巡检管理 | `ice-chart` 分组柱：计划 / 已巡 / 超时 |
 
 岛的做法：DOM 里各放一个 `<div class="island">` + `<canvas>`；切页时由 `onIslands` 回调负责摆位，
 并**隐藏不在本页的岛**（岛不在引擎显示树里，不处理会「飘着」）。
@@ -220,6 +234,9 @@ src/
     live-signal.ts      实时点位（量程 / 阈值 / 尖峰）+ 阈值判定 + 分区溶解氧矩阵滚动
     sizing.ts           参数化试算：脱氮上界 (R+r)/(1+R+r)、温度与泥龄修正、需氧 / 污泥 / 电耗
     alarm-log.ts        报警事件：审计条目 + 24h 越限小时 + 工况事件 → 派单 / 确认 / 闭环
+    sludge-manifest.ts  污泥产运：沿流程折算（干泥守恒）+ 外运联单状态机 + 处置成本
+    asset-registry.ts   设备台账：单元派生 + 健康度 / MTBF / 维保计划 / 备件（hashOf 确定性）
+    inspection.ts       巡检：点位由符号目录的「巡检要点」派生 + 班次任务 + 到位率 / 隐患闭环
   view/            与家族打交道的一层
     adapter.ts          设计器 → 扁平图（引擎结构与业务结构之间唯一的接触点）
     shell.ts            画布化外壳：侧栏 ICEMenu / 顶栏 / 卡片栅格 / 页签切换 / 岛的回调 / 消息覆盖画布
@@ -228,7 +245,7 @@ src/
     canvas-viewport.ts  岛的铺满容器 + 滚轮锚点缩放 + 拖拽平移
     board.ts            图表装配 + option 构造（ice-chart）
     symbol-legend.ts    符号图例的版面计算（纯函数）与渲染
-    pages/              六个页面：process / data / live / calc / events / legend
+    pages/              九个页面：process / data / live / calc / events / legend / sludge / asset / inspection
   entries/app.ts   唯一入口（只做装配与状态编排，不写业务规则）
 tests/domain/      jest 单测（镜像 domain 结构）
 e2e/               Playwright 端到端 + 画布断言工具（按坐标点控件、按像素验绘制）

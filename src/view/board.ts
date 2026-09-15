@@ -11,6 +11,8 @@ import { createChart, type ChartOption } from '@damoqiongqiu/ice-chart';
 import type { DayPoint } from '../domain/process-model';
 import { DISCHARGE_LIMIT_1A } from '../domain/water-quality';
 import type { CategoryMeta } from '../domain/symbol-catalog';
+import type { SludgeStage } from '../domain/sludge-manifest';
+import { HEALTH_DIMS } from '../domain/asset-registry';
 
 export type ChartHandle = {
   chart: any;
@@ -140,6 +142,84 @@ export function symbolMixOption(stats: Array<CategoryMeta & { count: number }>):
         data: stats.map((item) => item.count),
         barWidth: 0.5,
       },
+    ],
+  } as ChartOption;
+}
+
+/**
+ * 污泥流程：湿泥量（柱，左轴）+ 含水率（线，右轴）。
+ *
+ * 两根轴是必须的：湿泥量是 992 → 39.7 m³/d（跨两个数量级），含水率是 99.2% → 80%，
+ * 挤在一根轴上含水率会被压成一条直线。
+ */
+export function sludgeFlowOption(stages: SludgeStage[]): ChartOption {
+  return {
+    title: { text: '污泥流程', subtext: '湿泥量随含水率收缩 · 干泥量守恒' },
+    theme: 'light',
+    legend: { show: true, position: 'top' },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '环节', data: stages.map((stage) => stage.name) },
+    yAxis: [
+      { name: '湿泥量 m³/d' },
+      { name: '含水率 %', position: 'right', min: 70, max: 100 },
+    ],
+    animation: { enabled: true, duration: 480, easing: 'easeOutCubic' },
+    series: [
+      { id: 'wet', type: 'bar', name: '湿泥量', data: stages.map((stage) => stage.wetFlow), barWidth: 0.45 },
+      {
+        id: 'water',
+        type: 'line',
+        name: '含水率',
+        yAxisIndex: 1,
+        data: stages.map((stage) => Math.round(stage.waterRate * 1000) / 10),
+        smooth: true,
+        symbolSize: 6,
+        lineWidth: 2,
+      },
+    ],
+  } as ChartOption;
+}
+
+/** 设备健康度矩阵：横轴 = 装置分类、纵轴 = 五个健康维度（`ice-chart` heatmap 的 `[x, y, value]`）。 */
+export function assetHealthOption(
+  matrix: Array<[string, string, number]>,
+  categories: string[]
+): ChartOption {
+  return {
+    title: { text: '健康度矩阵', subtext: '装置分类 × 五个维度（平均分）' },
+    theme: 'light',
+    legend: { show: false },
+    tooltip: { trigger: 'item' },
+    xAxis: { type: 'category', data: categories },
+    // 分类轴是**自下而上**排的，反转一下让「运行工况」在最上面（与 HEALTH_DIMS 的阅读顺序一致）
+    yAxis: { type: 'category', data: HEALTH_DIMS.slice().reverse() },
+    grid: { x: false, y: false },
+    animation: { enabled: true, duration: 400 },
+    series: [{ id: 'health', type: 'heatmap', name: '健康度', data: matrix }],
+  } as ChartOption;
+}
+
+/** 巡检路线到位情况：计划 / 已巡 / 超时（三条路线分组柱）。 */
+export function inspectionRouteOption(stats: {
+  routes: string[];
+  planned: number[];
+  done: number[];
+  missed: number[];
+}): ChartOption {
+  return {
+    title: { text: '路线到位情况', subtext: '按巡检路线统计条数' },
+    theme: 'light',
+    legend: { show: true, position: 'top' },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '路线', data: stats.routes },
+    yAxis: { name: '条数' },
+    animation: { enabled: true, duration: 440, easing: 'easeOutCubic' },
+    series: [
+      { id: 'planned', type: 'bar', name: '计划', data: stats.planned, barWidth: 0.4 },
+      { id: 'done', type: 'bar', name: '已巡', data: stats.done, barWidth: 0.4 },
+      { id: 'missed', type: 'bar', name: '超时', data: stats.missed, barWidth: 0.4 },
     ],
   } as ChartOption;
 }

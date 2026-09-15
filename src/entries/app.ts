@@ -55,7 +55,13 @@ import {
 import { mountIsland, placeIslands, type IslandHandle } from '../view/islands';
 import { installViewport } from '../view/canvas-viewport';
 import { clearLoginUser, mountLogin, readLoginUser, saveLoginUser } from '../view/login';
-import { dailyTrendOption, mountChart } from '../view/board';
+import {
+  assetHealthOption,
+  dailyTrendOption,
+  inspectionRouteOption,
+  mountChart,
+  sludgeFlowOption,
+} from '../view/board';
 import {
   AERATION_ZONES,
   DEFAULT_SCENARIO,
@@ -73,6 +79,21 @@ import {
   zoneMatrixData,
   ackAlarm,
   closeAlarm,
+  advanceManifest,
+  assetHealthCategories,
+  assetHealthMatrix,
+  assetKpi,
+  buildAssetRegistry,
+  buildInspectionTasks,
+  buildManifests,
+  inspectionKpi,
+  inspectionPoints,
+  maintenanceDue,
+  routeStats,
+  setTaskResult,
+  sludgeKpi,
+  sludgeStages,
+  summarizeManifests,
   type AlarmEvent,
   type ScenarioParams,
   type ScenarioResult,
@@ -91,6 +112,17 @@ import {
 } from '../view/pages/live-page';
 import { buildCalcPage, curveIslandRect, type CalcPageHandle } from '../view/pages/calc-page';
 import { buildEventsPage, type EventsPageHandle } from '../view/pages/events-page';
+import {
+  buildSludgePage,
+  sludgeFlowIslandRect,
+  type SludgePageHandle,
+} from '../view/pages/sludge-page';
+import { assetHealthIslandRect, buildAssetPage, type AssetPageHandle } from '../view/pages/asset-page';
+import {
+  buildInspectionPage,
+  inspectionRouteIslandRect,
+  type InspectionPageHandle,
+} from '../view/pages/inspection-page';
 import { graphOfDesigner } from '../view/adapter';
 import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
 
@@ -113,6 +145,9 @@ const islands: Record<string, IslandHandle> = {
   'live-gauge': mountIsland('live-gauge', need<HTMLCanvasElement>('canvas-live-gauge')),
   'live-heat': mountIsland('live-heat', need<HTMLCanvasElement>('canvas-live-heat')),
   'calc-curve': mountIsland('calc-curve', need<HTMLCanvasElement>('canvas-calc-curve')),
+  'sludge-flow': mountIsland('sludge-flow', need<HTMLCanvasElement>('canvas-sludge-flow')),
+  'asset-health': mountIsland('asset-health', need<HTMLCanvasElement>('canvas-asset-health')),
+  'inspection-route': mountIsland('inspection-route', need<HTMLCanvasElement>('canvas-inspection-route')),
 };
 // 先把所有岛摆到位再建引擎：引擎初始化要读画布尺寸，摆之前是 0×0
 islands.process.place(processIslandRect(layout));
@@ -122,6 +157,9 @@ islands['live-trend'].place(liveTrendIslandRect(layout));
 islands['live-gauge'].place(gaugeIslandRect(layout));
 islands['live-heat'].place(heatIslandRect(layout));
 islands['calc-curve'].place(curveIslandRect(layout));
+islands['sludge-flow'].place(sludgeFlowIslandRect(layout));
+islands['asset-health'].place(assetHealthIslandRect(layout));
+islands['inspection-route'].place(inspectionRouteIslandRect(layout));
 
 /* ================= 岛 1：工艺图（设计器） ================= */
 
@@ -221,6 +259,30 @@ const liveHeat = mountChart(islands['live-heat'].canvas, () => ({
 /** 试算曲线：理论上界 + 修正后能力（都是 function 系列）+ 当前工作点 */
 let curveOptionOf = () => ({ series: [] as any[] });
 const calcCurve = mountChart(islands['calc-curve'].canvas, () => curveOptionOf() as any);
+
+/* ================= 运营类三个场景的状态（都是纯函数 + 不可变更新） ================= */
+
+/** 污泥外运联单：由当前 KPI 确定性生成（同产量 → 同结果，e2e 可复现） */
+let sludgeManifests = buildManifests(kpi.sludge);
+/** 设备台账：**从图上实时读到的单元派生**（图上有几台，账上就有几条） */
+let assets = buildAssetRegistry(graphOfDesigner(designer).nodes, designs);
+/** 今日巡检任务：点位由符号目录的「巡检要点」派生，不另写一份清单 */
+let inspectionTasks = buildInspectionTasks(inspectionPoints());
+
+/* ================= 岛 8~10：运营类三个场景的图 ================= */
+
+/** 污泥流程：湿泥量（柱）+ 含水率（线，右轴） */
+const sludgeFlow = mountChart(islands['sludge-flow'].canvas, () => sludgeFlowOption(sludgeStages(kpi.sludge)) as any);
+
+/** 设备健康度矩阵：装置分类 × 五个维度 */
+const assetHealth = mountChart(islands['asset-health'].canvas, () =>
+  assetHealthOption(assetHealthMatrix(assets), assetHealthCategories(assets)) as any
+);
+
+/** 巡检路线到位情况：计划 / 已巡 / 超时 */
+const inspectionRoute = mountChart(islands['inspection-route'].canvas, () =>
+  inspectionRouteOption(routeStats(inspectionTasks)) as any
+);
 
 function snapshot() {
   return {
@@ -379,6 +441,9 @@ function applyScenario(next: ScenarioParams): void {
 
 let alarms: AlarmEvent[] = [];
 let eventsPage: EventsPageHandle | null = null;
+let sludgePage: SludgePageHandle | null = null;
+let assetPage: AssetPageHandle | null = null;
+let inspectionPage: InspectionPageHandle | null = null;
 let operatorName = '值班员';
 
 function refreshAlarms(): void {
@@ -464,7 +529,16 @@ function recompute(): void {
   dayPoints = simulateDay(graph, designs, meta, mode);
   trace = traceProcessFlow(graph, { deprioritizedNodes: NORMALLY_CLOSED_VALVES });
 
+  // 运营类三个场景跟着「图纸 + 工况」重算（与 alarms 同策略：整份重建，不做增量）
+  assets = buildAssetRegistry(graph.nodes, designs);
+  sludgeManifests = buildManifests(kpi.sludge);
+  inspectionTasks = buildInspectionTasks(inspectionPoints());
+
   if (islands.board.visible()) board.refresh();
+  // 三张运营类图也只在可见时刷（不可见时 resize 会自己跳过，但没必要每帧重算 option）
+  if (islands['sludge-flow'].visible()) sludgeFlow.refresh();
+  if (islands['asset-health'].visible()) assetHealth.refresh();
+  if (islands['inspection-route'].visible()) inspectionRoute.refresh();
   refreshAlarms();
   shell.refresh();
   graphIce.dirty = true;
@@ -660,7 +734,12 @@ const NAV_DOMAINS: ShellDomain[] = [
     key: 'operation',
     label: '运营',
     iconPath: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
-    pages: [{ key: 'events', label: '事件中心' }],
+    pages: [
+      { key: 'events', label: '事件中心' },
+      { key: 'sludge', label: '污泥产运' },
+      { key: 'asset', label: '设备资产' },
+      { key: 'inspection', label: '巡检管理' },
+    ],
   },
 ];
 const NAV_DOMAIN_KEYS = NAV_DOMAINS.map((domain) => domain.key);
@@ -838,6 +917,51 @@ const shell = mountShell({
         return legendPage;
       },
     },
+    {
+      key: 'sludge',
+      label: '污泥产运',
+      build: (ctx: PageContext) => {
+        sludgePage = buildSludgePage(ctx, {
+          kpi: () => kpi,
+          manifests: () => sludgeManifests,
+          onAdvance: (id: string) => {
+            sludgeManifests = advanceManifest(sludgeManifests, id, operatorName);
+          },
+          operator: () => operatorName,
+        });
+        return sludgePage;
+      },
+    },
+    {
+      key: 'asset',
+      label: '设备资产',
+      build: (ctx: PageContext) => {
+        assetPage = buildAssetPage(ctx, {
+          assets: () => assets,
+          onMaintain: (id: string) => {
+            assets = assets.map((item) =>
+              item.id === id ? { ...item, maintenance: { ...item.maintenance, due: false, done: true } } : item
+            );
+          },
+          operator: () => operatorName,
+        });
+        return assetPage;
+      },
+    },
+    {
+      key: 'inspection',
+      label: '巡检管理',
+      build: (ctx: PageContext) => {
+        inspectionPage = buildInspectionPage(ctx, {
+          tasks: () => inspectionTasks,
+          onResult: (id: string, result: any, note: string) => {
+            inspectionTasks = setTaskResult(inspectionTasks, id, result, operatorName, note);
+          },
+          operator: () => operatorName,
+        });
+        return inspectionPage;
+      },
+    },
   ],
   onIslands: (specs: IslandSpec[]) => {
     placeIslands(islands, specs);
@@ -871,6 +995,25 @@ const shell = mountShell({
       requestAnimationFrame(() => {
         calcCurve.resize();
         calcCurve.refresh();
+      });
+    }
+    // 运营类三张图同理：懒显示，第一次露出来补一次尺寸对齐 + 首帧数据
+    if (specs.some((spec) => spec.id === 'sludge-flow')) {
+      requestAnimationFrame(() => {
+        sludgeFlow.resize();
+        sludgeFlow.refresh();
+      });
+    }
+    if (specs.some((spec) => spec.id === 'asset-health')) {
+      requestAnimationFrame(() => {
+        assetHealth.resize();
+        assetHealth.refresh();
+      });
+    }
+    if (specs.some((spec) => spec.id === 'inspection-route')) {
+      requestAnimationFrame(() => {
+        inspectionRoute.resize();
+        inspectionRoute.refresh();
       });
     }
   },
@@ -1053,6 +1196,59 @@ else login.show();
     close: (id: string) => {
       alarms = closeAlarm(alarms, id, operatorName);
       if (eventsPage) eventsPage.reload();
+    },
+  },
+  // 污泥产运（getter：recompute() 换了数据之后读到的就是最新的）
+  sludge: {
+    get metrics() {
+      return sludgeKpi(kpi.sludge, sludgeManifests);
+    },
+    get stages() {
+      return sludgeStages(kpi.sludge);
+    },
+    get manifests() {
+      return sludgeManifests;
+    },
+    get statusCounts() {
+      return summarizeManifests(sludgeManifests);
+    },
+    advance: (id: string) => {
+      sludgeManifests = advanceManifest(sludgeManifests, id, operatorName);
+      if (sludgePage) sludgePage.reload();
+    },
+  },
+  // 设备资产
+  assets: {
+    get list() {
+      return assets;
+    },
+    get metrics() {
+      return assetKpi(assets);
+    },
+    get dueCount() {
+      return maintenanceDue(assets).length;
+    },
+    maintain: (id: string) => {
+      assets = assets.map((item) =>
+        item.id === id ? { ...item, maintenance: { ...item.maintenance, due: false, done: true } } : item
+      );
+      if (assetPage) assetPage.reload();
+    },
+  },
+  // 巡检管理
+  inspection: {
+    get tasks() {
+      return inspectionTasks;
+    },
+    get metrics() {
+      return inspectionKpi(inspectionTasks);
+    },
+    get routes() {
+      return routeStats(inspectionTasks);
+    },
+    result: (id: string, result: 'normal' | 'hazard', note = '') => {
+      inspectionTasks = setTaskResult(inspectionTasks, id, result, operatorName, note);
+      if (inspectionPage) inspectionPage.reload();
     },
   },
   // 统一选择总线（端到端测试 / 调试入口）

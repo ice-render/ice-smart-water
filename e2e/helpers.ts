@@ -20,7 +20,17 @@ import { expect, type Page } from '@playwright/test';
  * 版面体检 / 全量审计 / 截图脚本都从这里取，别再各自写一份字面量数组
  * （以前散在 `layout.spec.ts` 与 `audit-all.spec.ts`，新增页签必漏一处）。
  */
-export const PAGES = ['process', 'data', 'live', 'calc', 'events', 'legend'];
+export const PAGES = [
+  'process',
+  'data',
+  'live',
+  'calc',
+  'events',
+  'legend',
+  'sludge',
+  'asset',
+  'inspection',
+];
 
 export type CanvasStats = {
   width: number;

@@ -17,3 +17,6 @@ export * from './daily-profile';
 export * from './live-signal';
 export * from './sizing';
 export * from './alarm-log';
+export * from './sludge-manifest';
+export * from './asset-registry';
+export * from './inspection';

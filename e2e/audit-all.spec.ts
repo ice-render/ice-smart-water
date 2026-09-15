@@ -35,6 +35,9 @@ const ISLAND_MAP: Record<string, Array<{ island: string; card: string }>> = {
   calc: [{ island: 'calc-curve', card: 'calc-curve-card' }],
   legend: [{ island: 'legend', card: 'legend-card' }],
   events: [],
+  sludge: [{ island: 'sludge-flow', card: 'sludge-flow-card' }],
+  asset: [{ island: 'asset-health', card: 'asset-health-card' }],
+  inspection: [{ island: 'inspection-route', card: 'inspection-route-card' }],
 };
 
 function worldOf(page: any, expr: string) {
