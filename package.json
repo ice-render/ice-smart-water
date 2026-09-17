@@ -22,7 +22,7 @@
     "@damoqiongqiu/ice-chart": "file:../ice-chart",
     "ice-entity-designer": "file:../ice-entity-designer",
     "ice-render": "file:../ice-render",
-    "ice-web-components": "^1.13.0"
+    "ice-web-components": "^1.14.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

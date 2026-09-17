@@ -370,7 +370,9 @@ export function mountShell(options: ShellOptions): ShellHandle {
     left: 24,
     top: 22,
     text: options.brand,
-    style: { fontSize: 20, fontWeight: '700', fillStyle: theme.colors.primary },
+    // 品牌标题是**文字**：用 `link` 那一档（`primary` 是填充色，压在暗色卡片上只有 2.96:1）。
+    // 判据与分工见 ice-web-components 的 docs/guides/theming.md §1.1。
+    style: { fontSize: 20, fontWeight: '700', fillStyle: theme.colors.link },
   });
   const brandSub = new ICELabel({
     left: 24,
