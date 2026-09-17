@@ -117,7 +117,9 @@ describe('成员顺序棘轮（static 常量 → 实例字段 → 构造函数 �
     let scanned = 0;
     pageFiles.forEach((file) => {
       const source = readFileSync(join(PAGES_DIR, file), 'utf8');
-      const at = source.indexOf('class ');
+      // 必须是**行首的类声明**：用 `indexOf('class ')` 会命中注释里那段示例代码，
+      // 扫出来的序列就成了空的（那种假的绿比红更危险）。
+      const at = source.search(/^[ \t]*(?:export\s+)?(?:abstract\s+)?class\s+[A-Za-z_$]/m);
       if (at < 0) return;
       const seq = memberSequence(source.slice(at).split('\n').slice(1).join('\n'));
       if (!seq) return;
