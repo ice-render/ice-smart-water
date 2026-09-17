@@ -132,6 +132,13 @@ function toMountedPage(page: PageContent): MountedPage {
 
 export type PageContext = {
   ice: any;
+  /**
+   * 构建期的主题快照 —— **只用于几何量**（`spacing` / `radius` / `font` / `control`）。
+   *
+   * ⚠️ **不要用它取颜色**。这是构建页面的那一刻读到的主题对象，颜色会**冻在那一刻**：
+   * 切主题时不重建页面，色值不会变（实测过：符号图例整块 253 个节点一个颜色都没变）。
+   * 颜色一律写**主题引用** `token('ui.colors.x')` —— paint 时由引擎解析，热切换与局部作用域都跟着走。
+   */
   theme: any;
   layout: ShellLayout;
   toast: (text: string, type?: string) => void;
@@ -415,7 +422,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     footerNodes.name.setText(user.name);
     if (user.role !== undefined) footerNodes.role.setText(user.role);
     footerNodes.avatar.setText(user.avatar || avatarTextOf(user.name));
-    ice.dirty = true;
+    ice.requestRepaint();
   }
 
   /** 域定义 + 「页 key → 所属域」反查（`show(pageKey)` 靠它自动切域） */
@@ -510,7 +517,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
       onChange: (value: string) => show(value),
     });
     header.addChild(pageTabs);
-    ice.dirty = true;
+    ice.requestRepaint();
   }
 
   /** 顶栏右侧：状态标签 + 页级操作按钮（切页时重建） */
@@ -567,7 +574,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
       return button;
     });
     layoutHeaderRight();
-    ice.dirty = true;
+    ice.requestRepaint();
   }
 
   function setStatusTags(tags: StatusTagSpec[]): void {
@@ -591,7 +598,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
       return node;
     });
     layoutHeaderRight();
-    ice.dirty = true;
+    ice.requestRepaint();
   }
 
   /* ---------------- 内容区 ----------------
@@ -653,7 +660,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     applyPageTags();
     collectIslands();
     if (options.onIslands) options.onIslands(Object.keys(isles).map((id) => ({ id, rect: isles[id] })));
-    ice.dirty = true;
+    ice.requestRepaint();
     if (options.onPageShow) options.onPageShow(key);
   }
 
@@ -674,7 +681,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     // 先重排页面内容，再让岛对齐卡片（岛的洞是按卡片矩形算的，卡片动了洞就动）
     if (currentHandle) currentHandle.update();
     applyPageTags();
-    ice.dirty = true;
+    ice.requestRepaint();
   }
 
   function toast(text: string, type = 'success'): void {
@@ -751,7 +758,15 @@ export function avatarTextOf(name: string): string {
   return text.slice(0, 1);
 }
 
-/** 把整棵子树抬到指定 zIndex（同值不破坏内部父子顺序） */
+/**
+ * 把整棵子树抬到指定 zIndex。
+ *
+ * ⚠️ **历史遗留**：这套"整棵子树设成同一个 zIndex"的写法是引擎 2.13 之前为了绕开
+ * "渲染队列全局按 zIndex 排序"（父容器后构造就会盖住自己的子树）才需要的手法。
+ * 2.13 起绘制顺序是**树序 + 兄弟按 zIndex**，子永远画在父之上，这里只剩"把这一层排到兄弟里的最后"
+ * 这一个作用 —— 等价于给这一层的节点设一个更大的 zIndex 即可，不再需要递归整棵子树。
+ * 保留不动是为了不扰动既有版面；新代码别照抄。
+ */
 export function raiseSubtree(node: any, z: number): void {
   if (!node || !node.state) return;
   node.state.zIndex = z;
@@ -825,7 +840,7 @@ export function paragraph(
     width: rect.width,
     height,
     text: rect.text,
-    style: { fontSize, wrap: true, lineHeight, fillStyle: rect.color || ctx.theme.colors.textSecondary },
+    style: { fontSize, wrap: true, lineHeight, fillStyle: rect.color || token('ui.colors.textSecondary') },
   });
 }
 
@@ -837,7 +852,7 @@ export function sectionHeading(ctx: PageContext, left: number, top: number, text
     top,
     text,
     height: Math.round(fontSize * 1.6),
-    style: { fontSize, fontWeight: '600', fillStyle: ctx.theme.colors.textSecondary },
+    style: { fontSize, fontWeight: '600', fillStyle: token('ui.colors.textSecondary') },
   });
 }
 

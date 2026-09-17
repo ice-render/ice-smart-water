@@ -325,6 +325,6 @@ export class SludgePage extends WaterPage {
     this.statCards[4].setTrend(`闭合率 ${Math.round(kpi.closureRate * 100)}%`);
 
     this.table.setData(manifestRows(manifests));
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 }

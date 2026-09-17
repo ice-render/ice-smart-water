@@ -265,16 +265,16 @@ export class LivePage extends WaterPage {
     });
     this.statusHeading.setText(summary.alarm ? '有越限点位' : summary.warning ? '有需关注点位' : '全部点位正常');
     this.statusHeading.setTextColor(
-      summary.alarm ? theme.colors.error : summary.warning ? theme.colors.warning : theme.colors.textSecondary
+      summary.alarm ? token('ui.colors.error') : summary.warning ? token('ui.colors.warning') : token('ui.colors.textSecondary')
     );
     this.statusText.setText(summary.text);
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 
   /** 定时器跑没跑（按钮文案要用） */
   public setRunning(running: boolean): void {
     if (this.toggleButton) this.toggleButton.setText(running ? '暂停' : '继续');
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 
   /** 唯一改值入口：读数由 `applyReadings()` 驱动，这里不需要额外重排。 */

@@ -438,13 +438,13 @@ export class CalcPage extends WaterPage {
         width: this.adviceWidth - CARD_INSET * 2,
         text: `• ${text}`,
         fontSize: 11.5,
-        color: result.warnings.length ? theme.colors.warning : theme.colors.success,
+        color: result.warnings.length ? token('ui.colors.warning') : token('ui.colors.success'),
       } as any)
     );
     nodes.forEach((node) => this.adviceBody.addChild(node, false));
     stackColumn(nodes, { left: CARD_INSET, top: 52, width: this.adviceWidth - CARD_INSET * 2, gap: 6 });
 
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 
   /** 唯一改值入口：按当前入参重算一遍。 */

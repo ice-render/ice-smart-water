@@ -238,7 +238,7 @@ export class AssetPage extends WaterPage {
                 .map((part) => `${part.name}：库存 ${part.inStock}/${part.required}${part.ok ? '' : '（缺料）'}`)
                 .join('　·　'),
               fontSize: 12,
-              color: missing.length ? theme.colors.error : theme.colors.textSecondary,
+              color: missing.length ? token('ui.colors.error') : token('ui.colors.textSecondary'),
             }),
             false
           );
@@ -309,6 +309,6 @@ export class AssetPage extends WaterPage {
     this.statCards[5].setTrend('关键备件齐套');
 
     this.table.setData(assetRows(assets));
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 }

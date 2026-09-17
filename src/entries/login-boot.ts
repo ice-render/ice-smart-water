@@ -15,9 +15,11 @@ import { installTheme } from '../view/theme';
 /**
  * 装主题 —— **必须在这里、而且必须是本文件第一件跑的事**。
  *
- * 组件库的主题是构造期读一次（`ice-web-components/docs/guides/theming.md`），
- * 而下面这几行马上就会构造登录门（`mountLogin`）。装晚了，登录门的 ICERect / ICEInput
- * 就带着旧色被造出来，之后无论怎么 `setTheme` 都不会变 —— 症状是"选了深色，登录页还是白的"。
+ * 登录门是**按"启动即定死"的那套主题**一次性建出来的（`?theme=` 决定，运行期不切），
+ * 而下面这几行马上就会构造它（`mountLogin`）。装晚了，登录门的 ICERect / ICEInput
+ * 会先按默认主题的**度量**（圆角 / 控件高）被造出来 —— 症状是"选了深色，登录页的量度是默认那套"。
+ *
+ * （颜色这一条**已经不需要**这个顺序了：样式槽里是主题引用，paint 时解析；这里保的是几何量。）
  *
  * 放在 `login-boot` 而不是 `boot.ts`：`boot.ts` 的 `import './login-boot'` 会被提升，
  * 在它自己的模块体之前执行；而 login-boot 正是"第一次造 UI"的地方（首屏只加载它）。

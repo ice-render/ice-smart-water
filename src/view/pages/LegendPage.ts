@@ -191,7 +191,7 @@ export class LegendPage extends WaterPage {
   /** 选中一个符号（或 null 清空） */
   public setSelection(entry: SymbolEntry | null, matched: number): void {
     this.__renderDetail(entry, matched);
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 
   /** 当前筛选值 */
@@ -204,7 +204,7 @@ export class LegendPage extends WaterPage {
     this.currentFilter = next;
     if (this.segmented.getValue() !== next) this.segmented.setValue(next);
     this.__renderDetail(null, matched);
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 
   private __renderDetail(entry: SymbolEntry | null, matched: number): void {
