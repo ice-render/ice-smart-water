@@ -181,6 +181,32 @@ async function main() {
   await page.waitForTimeout(900);
   await shot(page, '13-drill.png');
 
+  /**
+   * 深色主题：只拍四张关键的（登录门 / 工艺图 / 运行数据 / 符号库）。
+   *
+   * 为什么**另开一张 page** 而不是就地切：组件库的主题是构造期读一次，界面做不到就地换色
+   * （见 `src/view/theme.ts`）；用户切深色的真实路径就是"写偏好 + 重新加载"，所以这里用
+   * `?theme=dark` 重开一页 —— 与用户看到的是同一个东西。
+   */
+  const dark = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 2 });
+  dark.on('console', (m) => m.type() === 'error' && errors.push(`[dark] ${m.text()}`));
+  dark.on('pageerror', (e) => errors.push(`[dark] ${String(e)}`));
+  await dark.goto(`${BASE}/?theme=dark`, { waitUntil: 'domcontentloaded' });
+  await dark.waitForFunction(() => !!window.__login);
+  await dark.waitForTimeout(900);
+  await shot(dark, '20-dark-login.png');
+  await login(dark);
+  for (const [key, file, wait] of [
+    ['process', '21-dark-process.png', 1200],
+    ['data', '22-dark-data.png', 1500],
+    ['legend', '23-dark-legend.png', 1200],
+  ]) {
+    await gotoPage(dark, key);
+    await dark.waitForTimeout(wait);
+    await shot(dark, file);
+  }
+  await dark.close();
+
   await browser.close();
 
   console.log('\n控制台错误数：', errors.length);

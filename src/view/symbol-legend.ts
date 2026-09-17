@@ -8,6 +8,7 @@
  */
 import { ICERect, ICEText } from 'ice-render';
 import { WATER_SYMBOL_PRESETS, type WaterSymbolKind, type WaterMedium } from 'ice-entity-designer';
+import { iceUIManager } from 'ice-web-components';
 import {
   SYMBOL_CATEGORIES,
   categoryMetaOf,
@@ -108,10 +109,23 @@ export class SymbolLegend {
   private highlightBox: any = null;
   private selectedKind: WaterSymbolKind | null = null;
   private layout: LegendLayout = { cells: [], width: 0, height: 0 };
+  /** 界面底色 / 文字 / 边框都取自主题（构造期读一次，与库的控件同约定）。 */
+  private readonly theme: any;
 
   constructor(options: { ice: any; designer: any }) {
     this.ice = options.ice;
     this.designer = options.designer;
+    /**
+     * 取色**在此刻定下来**（与库的控件同一个约定：构造期读一次）。
+     *
+     * 这里原来写死了 7 处 UI 颜色（`#ffffff` 卡片底、`#e2e8f0` 分隔线、`#0f172a` /
+     * `#94a3b8` / `#64748b` 三级文字、`#0d6efd` 强调）—— 它们是**界面色**不是符号本身的颜色，
+     * 于是暗色主题下会留一张白卡片、深字压在深底上。改成 token 之后跟着主题走。
+     *
+     * 符号本身的颜色（`WATER_SYMBOL_PRESETS` 里的域配色）**不动**：那是工艺语义（介质/管径），
+     * 不是外观 —— 暗色下也应当保持同一套工艺配色。
+     */
+    this.theme = iceUIManager.getTheme();
   }
 
   public render(filter: LegendFilter = 'all'): LegendLayout {
@@ -130,7 +144,7 @@ export class SymbolLegend {
       stroke: false,
       interactive: false,
       linkable: false,
-      style: { fontSize: 20, fillStyle: '#0f172a', textAlign: 'left', textBaseline: 'middle' },
+      style: { fontSize: 20, fillStyle: this.theme.colors.text, textAlign: 'left', textBaseline: 'middle' },
     });
     this.ice.addChild(title);
 
@@ -171,7 +185,7 @@ export class SymbolLegend {
         interactive: false,
         linkable: false,
         zIndex: 999,
-        style: { fillStyle: 'rgba(13,110,253,0.06)', strokeStyle: '#0d6efd', lineWidth: 2 },
+        style: { fillStyle: this.theme.colors.primaryBg, strokeStyle: this.theme.colors.primary, lineWidth: 2 },
       });
       this.ice.addChild(this.highlightBox);
     }
@@ -216,7 +230,7 @@ export class SymbolLegend {
         stroke: false,
         interactive: false,
         linkable: false,
-        style: { fontSize: 14, fillStyle: '#0d6efd', textAlign: 'left', textBaseline: 'middle' },
+        style: { fontSize: 14, fillStyle: this.theme.colors.primary, textAlign: 'left', textBaseline: 'middle' },
       })
     );
     this.ice.addChild(
@@ -228,7 +242,7 @@ export class SymbolLegend {
         radius: 1,
         interactive: false,
         linkable: false,
-        style: { fillStyle: '#e2e8f0', strokeStyle: '#e2e8f0', lineWidth: 0 },
+        style: { fillStyle: this.theme.colors.border, strokeStyle: this.theme.colors.border, lineWidth: 0 },
       })
     );
   }
@@ -244,7 +258,7 @@ export class SymbolLegend {
         radius: 10,
         interactive: false,
         linkable: false,
-        style: { fillStyle: '#ffffff', strokeStyle: '#e2e8f0', lineWidth: 1 },
+        style: { fillStyle: this.theme.colors.surface, strokeStyle: this.theme.colors.border, lineWidth: 1 },
       })
     );
     this.ice.addChild(
@@ -257,7 +271,7 @@ export class SymbolLegend {
         stroke: false,
         interactive: false,
         linkable: false,
-        style: { fontSize: 11, fillStyle: '#94a3b8', textAlign: 'left', textBaseline: 'middle' },
+        style: { fontSize: 11, fillStyle: this.theme.colors.textTertiary, textAlign: 'left', textBaseline: 'middle' },
       })
     );
 
@@ -283,7 +297,7 @@ export class SymbolLegend {
         stroke: false,
         interactive: false,
         linkable: false,
-        style: { fontSize: 11, fillStyle: '#64748b', textAlign: 'center', textBaseline: 'middle' },
+        style: { fontSize: 11, fillStyle: this.theme.colors.textSecondary, textAlign: 'center', textBaseline: 'middle' },
       })
     );
   }

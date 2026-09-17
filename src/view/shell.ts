@@ -32,6 +32,7 @@ import {
   mountICEAccessibilityMirror,
 } from 'ice-web-components';
 import type { PageContent } from './WaterPage';
+import { applyThemeToIce } from './theme';
 
 /** 设计尺寸下限：窗口比它小就整页滚动（与 admin.html 同策略，换来"外壳坐标恒定、岛不用跟着重排"） */
 export const MIN_CANVAS_WIDTH = 1440;
@@ -319,6 +320,8 @@ export function mountShell(options: ShellOptions): ShellHandle {
   canvas.style.height = `${measured.height}px`;
 
   const ice = new ICE().init(canvas, { renderMode: 'dirty-rect' });
+  // 引擎侧主题（画布底色 / 选中框 / 手柄 / 引导线 / 阴影）—— 每个实例各自调一次
+  applyThemeToIce(ice);
 
   // 顶部消息画到「覆盖画布」（若有）：外壳画布在 DOM 里位于各「岛」之下，画在外壳工具层上的
   // 消息一旦堆进岛的区域就会被岛盖住。覆盖画布在所有岛之上、尺寸与外壳画布一致（坐标才能对齐）。
@@ -330,6 +333,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     overlay.style.width = `${measured.width}px`;
     overlay.style.height = `${measured.height}px`;
     messageIce = new ICE().init(overlay, { renderMode: 'dirty-rect' });
+    applyThemeToIce(messageIce);
   }
 
   const theme = iceUIManager.getTheme();
@@ -347,7 +351,8 @@ export function mountShell(options: ShellOptions): ShellHandle {
       interactive: false,
       fill: true,
       stroke: false,
-      style: { fillStyle: '#f8f9fa' },
+      // 页面底色取主题的 background token（原来写死 #f8f9fa：暗色下会留一块浅色底）
+      style: { fillStyle: theme.colors.background },
     })
   );
 

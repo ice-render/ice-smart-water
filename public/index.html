@@ -3,6 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      /*
+       * 主题标记：**必须在任何样式生效之前打上**，否则暗色用户每次开页都会先闪一下浅色
+       * （启动遮罩是纯 CSS 的，等不到 JS 跑起来）。
+       *
+       * 优先级与 `src/view/theme.ts` 的 `resolveThemeName()` **必须一致**：
+       * 显式 `?theme=` → localStorage → 默认 light。两处漂了就会"选深色但闪白"，
+       * 所以 `tests/view/theme.test.ts` 会读这段脚本把解析口径钉住。
+       * key 与那边的 THEME_STORAGE_KEY 是同一个字面量。
+       */
+      (function () {
+        var KEY = 'ice-smart-water:theme';
+        var ok = function (v) {
+          return v === 'light' || v === 'dark';
+        };
+        var wanted = new URLSearchParams(location.search).get('theme');
+        var stored = null;
+        try {
+          stored = localStorage.getItem(KEY);
+        } catch (e) {
+          /* 隐私模式：读不到就用默认 */
+        }
+        var name = ok(wanted) ? wanted : ok(stored) ? stored : 'light';
+        document.documentElement.dataset.theme = name;
+      })();
+    </script>
     <title>ice-smart-water · 智慧水务运行控制台</title>
     <%
       /*
@@ -126,6 +152,25 @@
         opacity: 1;
         visibility: visible;
         transition: opacity 0.25s ease;
+      }
+      /* ---------------------------------------------------------------------
+         暗色主题：**只覆盖"页面底色"这一层**（画布里的控件由引擎主题负责，见
+         `src/view/theme.ts`）。标记由 head 里的内联脚本按 `?theme=` / localStorage
+         打上 —— 不能等 JS：启动遮罩是纯 CSS 的，暗色用户每次开页都会先闪一下白底。
+         色值取 `ice-web-components` 的 dark token（`background #212529` /
+         `surface #2b3035`），与画布随后画出来的底色一致，切换时不跳。
+         --------------------------------------------------------------------- */
+      :root[data-theme='dark'] body {
+        background: #212529;
+        color: #dee2e6;
+      }
+      :root[data-theme='dark'] canvas#canvas-shell,
+      :root[data-theme='dark'] canvas#canvas-login {
+        background: #2b3035;
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.5);
+      }
+      :root[data-theme='dark'] #boot-overlay {
+        background: #212529;
       }
       /* 启动期间把应用整个藏起来：canvas 没写 width/height 属性时默认 300×150，
          不藏就会先闪一个左上角的白色矩形（遮罩万一没盖上也不该露） */

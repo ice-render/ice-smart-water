@@ -35,6 +35,7 @@ import {
   type PageContext,
   type Rect,
 } from './shell';
+import { applyThemeToIce } from './theme';
 
 /** 登录状态存这个 key（sessionStorage，按标签页） */
 export const LOGIN_STORAGE_KEY = 'ice-smart-water.user';
@@ -90,6 +91,9 @@ export function mountLogin(options: LoginOptions): LoginHandle {
 
   const ice = new ICE().init(canvas, { renderMode: 'dirty-rect' });
   const theme = iceUIManager.getTheme();
+  // 引擎侧也要跟上（画布底色 / 选中框 / 手柄 / 对齐引导线 / 阴影都走引擎主题）——
+  // 每个 ICE 实例都得自己调一次，库不会替我们传播（见 view/theme.ts 的说明）。
+  applyThemeToIce(ice);
   new ICEHoverManager(ice).start();
   getICEFocusManager(ice).start();
 
@@ -108,7 +112,8 @@ export function mountLogin(options: LoginOptions): LoginHandle {
       interactive: false,
       fill: true,
       stroke: false,
-      style: { fillStyle: '#f8fafc' },
+      // 底色取主题（原来是写死的 #f8fafc：暗色下会留一块白光板）
+      style: { fillStyle: theme.colors.background },
     })
   );
 

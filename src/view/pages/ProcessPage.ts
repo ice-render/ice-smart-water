@@ -78,12 +78,18 @@ export class ProcessPage extends WaterPage {
     power: '动力',
   };
 
-  /** 检视指标状态 → 进度条配色（与 ICE 主题一致） */
-  private static readonly STATUS_COLOR: Record<string, string> = {
-    success: '#198754',
-    warning: '#ffc107',
-    error: '#dc3545',
-    info: '#0d6efd',
+  /**
+   * 检视指标状态 → 主题里的状态色**名**。
+   *
+   * 原来是四个写死的 Bootstrap 值（`#198754` / `#ffc107` / `#dc3545` / `#0d6efd`）—— 注释里
+   * 写着"与 ICE 主题一致"，但字面量不会随主题走：暗色下这几条进度条还是浅色主题的那套亮度。
+   * 现在只记状态名，取色交给 `theme.colors`（同一份 token，浅深两套自动对）。
+   */
+  private static readonly STATUS_TOKEN: Record<string, string> = {
+    success: 'success',
+    warning: 'warning',
+    error: 'error',
+    info: 'info',
   };
 
   /**
@@ -477,7 +483,7 @@ export class ProcessPage extends WaterPage {
           height: 8,
           value: Math.round(m.ratio * 100),
           max: 100,
-          color: ProcessPage.STATUS_COLOR[m.status],
+          color: theme.colors[ProcessPage.STATUS_TOKEN[m.status]] || theme.colors.primary,
         });
         const value = new ICELabel({
           left: left + width - 74,
