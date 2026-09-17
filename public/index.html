@@ -6,19 +6,39 @@
     <title>ice-smart-water · 智慧水务运行控制台</title>
     <%
       /*
-       * 构建期就把「控制台 chunk」的带哈希文件名写进 HTML，让浏览器**解析 HTML 时**就开始并行下载它。
+       * 构建期算出「控制台 chunk」的带哈希文件名，交给下面那段内联脚本按登录态决定要不要预热。
        *
-       * 实测依据（2026-09-17，Slow 4G + 4x CPU、冷缓存、记住登录态的复访路径）：
-       * 只靠 `boot.ts` 里那句动态 import，浏览器必须等 boot.js **执行完**才发请求 ——
-       * boot.js 下载 341→1532ms、控制台 chunk 1664ms 才发出、外壳首帧 3792ms，两段下载完全串行。
-       * 加这条 preload 后两段并行，外壳首帧提前约 1s。
-       * 用 preload 而不是 prefetch：这条 chunk 在启动时就无条件 import，一定会用到；
-       * 运行期的 `webpackPrefetch` 注释做不到这点（它也是等 boot.js 执行时才注入 link）。
+       * 为什么按登录态分流（2026-09-17 实测，Slow 4G + 4x CPU、冷缓存，本地 gzip 服务）：
+       *   · 登录门路径（没有记住登录态）：登录门画完 **1614ms**（不预热）vs 2127ms（prefetch）
+       *     vs 2419ms（preload）—— 预热会和 boot.js 抢带宽，而登录门自己就是关键路径，所以**不预热**。
+       *   · 复访路径（记住登录态）：登录门不出现，控制台直接在关键路径上：外壳首帧
+       *     **2815ms（prefetch）** vs 3167ms（不预热）—— 动态 import 要等 boot.js 执行完才发请求，
+       *     整段下载是串行的；提前给个低优先级提示就能把它拉到并行。
+       * 低优先级的 prefetch 在两个路径上都优于 preload（preload 抢带宽更凶）。
+       *
+       * 这段脚本只做**性能提示**：key 与 `src/view/login.ts` 的 LOGIN_STORAGE_KEY 一致；
+       * 万一以后改名，最坏结果只是丢了这个提示（不会影响正确性）。
        */
       const consoleChunk = (compilation.chunks || []).find((c) => c.name === 'console');
       const consoleFile = consoleChunk && (consoleChunk.files || []).find((f) => f.endsWith('.js'));
     %>
-    <% if (consoleFile) { %><link rel="preload" as="script" href="<%= consoleFile %>" /><% } %>
+    <% if (consoleFile) { %>
+    <script>
+      (function () {
+        try {
+          if (sessionStorage.getItem('ice-smart-water.user')) {
+            var link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.as = 'script';
+            link.href = '<%= consoleFile %>';
+            document.head.appendChild(link);
+          }
+        } catch (e) {
+          /* 隐私模式等场景读不到 sessionStorage：静默跳过，不影响功能 */
+        }
+      })();
+    </script>
+    <% } %>
     <!-- 内联水滴图标：省一次 /favicon.ico 的 404（那会在控制台留一条 error，e2e 的"零报错"就废了） -->
     <link
       rel="icon"
