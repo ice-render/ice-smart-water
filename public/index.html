@@ -161,16 +161,18 @@
          `surface #2b3035`），与画布随后画出来的底色一致，切换时不跳。
          --------------------------------------------------------------------- */
       :root[data-theme='dark'] body {
-        background: #212529;
-        color: #dee2e6;
+        /* 括号里是**开页兜底值**（JS 还没跑、CSS 变量还没写时的颜色）；
+           JS 一跑，`applyThemeToCss()` 就把 token 表写成变量盖上来 —— 一份表两处用。 */
+        background: var(--ice-color-background, #212529);
+        color: var(--ice-color-text, #dee2e6);
       }
       :root[data-theme='dark'] canvas#canvas-shell,
       :root[data-theme='dark'] canvas#canvas-login {
-        background: #2b3035;
+        background: var(--ice-color-surface, #2b3035);
         box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.5);
       }
       :root[data-theme='dark'] #boot-overlay {
-        background: #212529;
+        background: var(--ice-color-background, #212529);
       }
       /* 启动期间把应用整个藏起来：canvas 没写 width/height 属性时默认 300×150，
          不藏就会先闪一个左上角的白色矩形（遮罩万一没盖上也不该露） */
