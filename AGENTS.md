@@ -155,6 +155,27 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 - **回归**：`e2e/boot-overlay.spec.ts`（4 例）——启动遮罩两条 + **"控制台 chunk 加载不出来时登录门照样能起来"**
   （钉住"首屏不依赖控制台"）+ **"弱网下先点登录、到货后自动进入"**（钉住排队那条路径）。
 
+#### 图表库按需加载 + 控制台 chunk 预热分流（2026-09-17 确立）
+
+- **`ice-chart`（281KB）不进首屏**：首屏是「工艺流程图」，一个图表都不用。`view/board.ts` 的
+  `mountChart()` 改成**动态 import**，并且只在**岛可见**时才建图（句柄把 `appendData / setData / setOption`
+  一起包住：没就绪时空转，**数据以应用侧为准**）。实时趋势的滑动窗口因此挪到应用侧 `trendWindow`，
+  建图那一刻一次喂满 —— 否则切到实时页会看到"历史丢了"。
+- **实测**（Slow 4G + 4x CPU、冷缓存、gzip）：控制台 chunk **612KB → 352KB**（gzip 178.6 → 105KB）；
+  线上复访外壳首帧 **3792ms → 2867ms**、启动遮罩消失 3914ms → 2904ms；登录门路径不变（1852ms）。
+  图表拆成独立 `chart.*.js`（74.5KB gzip），登录后 `prefetchWhenIdle()` 空闲预热 → 切到图表页不用等。
+- **控制台 chunk 要不要提前下载，取决于登录态**（实测结论，别凭感觉改）：
+  · 登录门路径（没记住登录态）：**不要预热** —— 抢带宽会让登录门本身变慢：画完
+    1614ms（不预热）/ 2127ms（prefetch）/ 2419ms（preload）。
+  · 复访路径（记住登录态）：登录门不出现、控制台就在关键路径上 → 给 `<link rel=prefetch>`
+    让两段下载并行：外壳首帧 2815ms（prefetch）/ 3167ms（不预热）。**用 prefetch 不用 preload**。
+  · 实现：`public/index.html` 顶部那段内联脚本 —— 构建期把 console chunk 的带哈希文件名写进 HTML，
+    只在 `sessionStorage['ice-smart-water.user']`（见 `view/login.ts` 的 `LOGIN_STORAGE_KEY`）存在时才注入。
+- **回归**：`e2e/app.spec.ts` 的「按需加载」用例钉三点 —— 默认页 `charts.boardReady() === false`、
+  控制台 chunk 原始体积 < 450KB（拆开前 612KB）、图表库必须是独立的 `chart.*.js`；
+  所有读图表内部状态的用例都要先 `waitForFunction(() => __water.charts.*Ready())`。
+- **别做**：把 `ice-chart` 改回静态 import，或把图表实例改回"启动时全部建好" —— 那等于把 281KB 拉回首屏。
+
 - **多份 `ice-render`**：每个兄弟包的 `node_modules` 里都有一份自己装的 `ice-render`（版本可能不同）。
   `webpack.config.js` 用 `resolve.alias` 把四个包钉到同级仓库目录，否则会出现多份引擎实例，
   `typeId` 注册与 `instanceof` 全错位。**别删那段 alias，也别改成裸包名。**
