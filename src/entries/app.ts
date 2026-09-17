@@ -118,42 +118,18 @@ import {
   type SignalReading,
 } from '../domain';
 import { SymbolLegend, cellAt } from '../view/symbol-legend';
-import { buildProcessPage, processIslandRect } from '../view/pages/process-page';
-import { boardIslandRect, buildDataPage } from '../view/pages/data-page';
-import { buildLegendPage, legendIslandRect, type LegendPageHandle } from '../view/pages/legend-page';
-import {
-  buildLivePage,
-  gaugeIslandRect,
-  heatIslandRect,
-  liveTrendIslandRect,
-  type LivePageHandle,
-} from '../view/pages/live-page';
-import { buildCalcPage, curveIslandRect, type CalcPageHandle } from '../view/pages/calc-page';
-import { buildEventsPage, type EventsPageHandle } from '../view/pages/events-page';
-import {
-  buildSludgePage,
-  sludgeFlowIslandRect,
-  type SludgePageHandle,
-} from '../view/pages/sludge-page';
-import { assetHealthIslandRect, buildAssetPage, type AssetPageHandle } from '../view/pages/asset-page';
-import {
-  buildInspectionPage,
-  inspectionRouteIslandRect,
-  type InspectionPageHandle,
-} from '../view/pages/inspection-page';
-import {
-  buildEnergyPage,
-  energyMixIslandRect,
-  tariffIslandRect,
-  type EnergyPageHandle,
-} from '../view/pages/energy-page';
-import {
-  buildPumpPage,
-  pumpCurveIslandRect,
-  sumpLevelIslandRect,
-  type PumpPageHandle,
-} from '../view/pages/pump-page';
-import { buildDrillPage, drillCompareIslandRect, type DrillPageHandle } from '../view/pages/drill-page';
+import { ProcessPage } from '../view/pages/ProcessPage';
+import { DataPage } from '../view/pages/DataPage';
+import { LegendPage } from '../view/pages/LegendPage';
+import { LivePage } from '../view/pages/LivePage';
+import { CalcPage } from '../view/pages/CalcPage';
+import { EventsPage } from '../view/pages/EventsPage';
+import { SludgePage } from '../view/pages/SludgePage';
+import { AssetPage } from '../view/pages/AssetPage';
+import { InspectionPage } from '../view/pages/InspectionPage';
+import { EnergyPage } from '../view/pages/EnergyPage';
+import { PumpPage } from '../view/pages/PumpPage';
+import { DrillPage } from '../view/pages/DrillPage';
 import { graphOfDesigner } from '../view/adapter';
 import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
 import { hideBootOverlayWhenPainted } from '../view/boot-overlay';
@@ -187,21 +163,21 @@ const islands: Record<string, IslandHandle> = {
   'drill-compare': mountIsland('drill-compare', need<HTMLCanvasElement>('canvas-drill-compare')),
 };
 // 先把所有岛摆到位再建引擎：引擎初始化要读画布尺寸，摆之前是 0×0
-islands.process.place(processIslandRect(layout));
-islands.board.place(boardIslandRect(layout));
-islands.legend.place(legendIslandRect(layout));
-islands['live-trend'].place(liveTrendIslandRect(layout));
-islands['live-gauge'].place(gaugeIslandRect(layout));
-islands['live-heat'].place(heatIslandRect(layout));
-islands['calc-curve'].place(curveIslandRect(layout));
-islands['sludge-flow'].place(sludgeFlowIslandRect(layout));
-islands['asset-health'].place(assetHealthIslandRect(layout));
-islands['inspection-route'].place(inspectionRouteIslandRect(layout));
-islands['energy-mix'].place(energyMixIslandRect(layout));
-islands['energy-tariff'].place(tariffIslandRect(layout));
-islands['pump-curve'].place(pumpCurveIslandRect(layout));
-islands['sump-level'].place(sumpLevelIslandRect(layout));
-islands['drill-compare'].place(drillCompareIslandRect(layout));
+islands.process.place(ProcessPage.processIslandRect(layout));
+islands.board.place(DataPage.boardIslandRect(layout));
+islands.legend.place(LegendPage.legendIslandRect(layout));
+islands['live-trend'].place(LivePage.liveTrendIslandRect(layout));
+islands['live-gauge'].place(LivePage.gaugeIslandRect(layout));
+islands['live-heat'].place(LivePage.heatIslandRect(layout));
+islands['calc-curve'].place(CalcPage.curveIslandRect(layout));
+islands['sludge-flow'].place(SludgePage.sludgeFlowIslandRect(layout));
+islands['asset-health'].place(AssetPage.assetHealthIslandRect(layout));
+islands['inspection-route'].place(InspectionPage.inspectionRouteIslandRect(layout));
+islands['energy-mix'].place(EnergyPage.energyMixIslandRect(layout));
+islands['energy-tariff'].place(EnergyPage.tariffIslandRect(layout));
+islands['pump-curve'].place(PumpPage.pumpCurveIslandRect(layout));
+islands['sump-level'].place(PumpPage.sumpLevelIslandRect(layout));
+islands['drill-compare'].place(DrillPage.drillCompareIslandRect(layout));
 
 /* ================= 岛 1：工艺图（设计器） ================= */
 
@@ -216,7 +192,7 @@ const legendDesigner = new WaterProcessDesigner(legendIce);
 const legendViewport = installViewport({ ice: legendIce, canvas: islands.legend.canvas, designer: legendDesigner, padding: 40 });
 const legend = new SymbolLegend({ ice: legendIce, designer: legendDesigner });
 let legendFilter: LegendFilter = 'all';
-let legendPage: LegendPageHandle | null = null;
+let legendPage: LegendPage | null = null;
 
 /* ================= 业务状态 ================= */
 
@@ -407,7 +383,7 @@ let liveRunning = true;
 let liveSpeed = 1;
 let liveSamples = 0;
 let liveTimer: any = null;
-let livePage: LivePageHandle | null = null;
+let livePage: LivePage | null = null;
 
 /** 跑一拍：采样 → 推曲线 → 更新仪表与热力图 → 刷新读数卡 */
 function liveTick(): void {
@@ -432,7 +408,7 @@ function liveTick(): void {
     liveHeat.setData('heat', zoneMatrixData(heatMatrix, AERATION_ZONES));
   }
   const summary = summarizeReadings(liveReadings);
-  if (livePage) livePage.update(liveReadings, summary);
+  if (livePage) livePage.applyReadings(liveReadings, summary);
   shell.ice.dirty = true;
 }
 
@@ -470,7 +446,7 @@ function liveSetSpeed(speed: number): void {
 
 let scenarioParams: ScenarioParams = { ...DEFAULT_SCENARIO };
 let scenarioResult: ScenarioResult = evaluateScenario(scenarioParams);
-let calcPage: CalcPageHandle | null = null;
+let calcPage: CalcPage | null = null;
 
 /** 试算曲线：两条函数曲线（理论上界 / 修正后能力）+ 当前工作点 */
 function curveOption(): any {
@@ -541,18 +517,18 @@ function applyScenario(next: ScenarioParams): void {
 /* ================= 事件中心：报警状态 ================= */
 
 let alarms: AlarmEvent[] = [];
-let eventsPage: EventsPageHandle | null = null;
-let sludgePage: SludgePageHandle | null = null;
-let assetPage: AssetPageHandle | null = null;
-let inspectionPage: InspectionPageHandle | null = null;
-let energyPage: EnergyPageHandle | null = null;
-let pumpPage: PumpPageHandle | null = null;
-let drillPage: DrillPageHandle | null = null;
+let eventsPage: EventsPage | null = null;
+let sludgePage: SludgePage | null = null;
+let assetPage: AssetPage | null = null;
+let inspectionPage: InspectionPage | null = null;
+let energyPage: EnergyPage | null = null;
+let pumpPage: PumpPage | null = null;
+let drillPage: DrillPage | null = null;
 let operatorName = '值班员';
 
 function refreshAlarms(): void {
   alarms = buildAlarmEvents({ issues, points: dayPoints, mode: modeById(modeId), meta });
-  if (eventsPage) eventsPage.reload();
+  if (eventsPage) eventsPage.onUpdate();
 }
 
 /** 报警关联单元在不在工艺图上（事件中心「定位」按钮的可用性判断） */
@@ -963,18 +939,20 @@ const shell = mountShell({
     {
       key: 'process',
       label: '工艺流程图',
-      build: (ctx: PageContext) => buildProcessPage(ctx, { snapshot, onModeChange: setMode, onAction: handleAction }),
+      build: (ctx: PageContext) =>
+        new ProcessPage(ctx, { snapshot, onModeChange: setMode, onAction: handleAction }),
     },
     {
       key: 'data',
       label: '运行数据',
-      build: (ctx: PageContext) => buildDataPage(ctx, { snapshot }),
+      // 样板页：页面自己就是容器（新写法），其余页仍是老的闭包句柄，见 view/page.ts
+      build: (ctx: PageContext) => new DataPage(ctx, { snapshot }),
     },
     {
       key: 'live',
       label: '实时监视',
       build: (ctx: PageContext) => {
-        livePage = buildLivePage(ctx, {
+        livePage = new LivePage(ctx, {
           onToggleRunning: liveToggle,
           onSpeedChange: liveSetSpeed,
           isRunning: () => liveRunning,
@@ -986,7 +964,7 @@ const shell = mountShell({
       key: 'calc',
       label: '工艺试算',
       build: (ctx: PageContext) => {
-        calcPage = buildCalcPage(ctx, {
+        calcPage = new CalcPage(ctx, {
           initial: scenarioParams,
           onChange: applyScenario,
           onReset: () => applyScenario({ ...DEFAULT_SCENARIO }),
@@ -1001,7 +979,7 @@ const shell = mountShell({
       key: 'events',
       label: '事件中心',
       build: (ctx: PageContext) => {
-        eventsPage = buildEventsPage(ctx, {
+        eventsPage = new EventsPage(ctx, {
           events: () => alarms,
           onAck: (id) => {
             alarms = ackAlarm(alarms, id, operatorName);
@@ -1021,7 +999,7 @@ const shell = mountShell({
       key: 'legend',
       label: '符号库',
       build: (ctx: PageContext) => {
-        legendPage = buildLegendPage(ctx, {
+        legendPage = new LegendPage(ctx, {
           initialFilter: legendFilter,
           onFilterChange: (next: LegendFilter) => applyLegendFilter(next),
           onAction: handleLegendAction,
@@ -1033,7 +1011,7 @@ const shell = mountShell({
       key: 'sludge',
       label: '污泥产运',
       build: (ctx: PageContext) => {
-        sludgePage = buildSludgePage(ctx, {
+        sludgePage = new SludgePage(ctx, {
           kpi: () => kpi,
           manifests: () => sludgeManifests,
           onAdvance: (id: string) => {
@@ -1048,7 +1026,7 @@ const shell = mountShell({
       key: 'asset',
       label: '设备资产',
       build: (ctx: PageContext) => {
-        assetPage = buildAssetPage(ctx, {
+        assetPage = new AssetPage(ctx, {
           assets: () => assets,
           onMaintain: (id: string) => {
             assets = assets.map((item) =>
@@ -1064,7 +1042,7 @@ const shell = mountShell({
       key: 'inspection',
       label: '巡检管理',
       build: (ctx: PageContext) => {
-        inspectionPage = buildInspectionPage(ctx, {
+        inspectionPage = new InspectionPage(ctx, {
           tasks: () => inspectionTasks,
           onResult: (id: string, result: any, note: string) => {
             inspectionTasks = setTaskResult(inspectionTasks, id, result, operatorName, note);
@@ -1078,7 +1056,7 @@ const shell = mountShell({
       key: 'energy',
       label: '能耗分项',
       build: (ctx: PageContext) => {
-        energyPage = buildEnergyPage(ctx, {
+        energyPage = new EnergyPage(ctx, {
           energy: () => currentEnergy(),
           nodes: () => meterTree(kpi, graphOfDesigner(designer).nodes, designs),
         });
@@ -1089,7 +1067,7 @@ const shell = mountShell({
       key: 'pump',
       label: '泵站监视',
       build: (ctx: PageContext) => {
-        pumpPage = buildPumpPage(ctx, {
+        pumpPage = new PumpPage(ctx, {
           stations: () => currentPumps(),
           onToggle: (pumpId: string) => {
             const pump = currentPumps()
@@ -1109,7 +1087,7 @@ const shell = mountShell({
       key: 'drill',
       label: '工况预案',
       build: (ctx: PageContext) => {
-        drillPage = buildDrillPage(ctx, {
+        drillPage = new DrillPage(ctx, {
           planId: () => drillPlanId,
           onSelectPlan: (id: string) => {
             drillPlanId = id;
@@ -1384,11 +1362,11 @@ if (login.visible()) {
     filter: () => (eventsPage ? eventsPage.filter() : { status: 'all', keyword: '' }),
     ack: (id: string) => {
       alarms = ackAlarm(alarms, id, operatorName);
-      if (eventsPage) eventsPage.reload();
+      if (eventsPage) eventsPage.onUpdate();
     },
     close: (id: string) => {
       alarms = closeAlarm(alarms, id, operatorName);
-      if (eventsPage) eventsPage.reload();
+      if (eventsPage) eventsPage.onUpdate();
     },
   },
   // 污泥产运（getter：recompute() 换了数据之后读到的就是最新的）
@@ -1407,7 +1385,7 @@ if (login.visible()) {
     },
     advance: (id: string) => {
       sludgeManifests = advanceManifest(sludgeManifests, id, operatorName);
-      if (sludgePage) sludgePage.reload();
+      if (sludgePage) sludgePage.onUpdate();
     },
   },
   // 设备资产
@@ -1425,7 +1403,7 @@ if (login.visible()) {
       assets = assets.map((item) =>
         item.id === id ? { ...item, maintenance: { ...item.maintenance, due: false, done: true } } : item
       );
-      if (assetPage) assetPage.reload();
+      if (assetPage) assetPage.onUpdate();
     },
   },
   // 巡检管理
@@ -1441,7 +1419,7 @@ if (login.visible()) {
     },
     result: (id: string, result: 'normal' | 'hazard', note = '') => {
       inspectionTasks = setTaskResult(inspectionTasks, id, result, operatorName, note);
-      if (inspectionPage) inspectionPage.reload();
+      if (inspectionPage) inspectionPage.onUpdate();
     },
   },
   // 能耗分项
@@ -1469,11 +1447,11 @@ if (login.visible()) {
         .flatMap((station) => station.pumps)
         .filter((item) => item.id === id)[0];
       pumpOverrides = { ...pumpOverrides, [id]: !(pump && pump.running) };
-      if (pumpPage) pumpPage.reload();
+      if (pumpPage) pumpPage.onUpdate();
     },
     reset: () => {
       pumpOverrides = {};
-      if (pumpPage) pumpPage.reload();
+      if (pumpPage) pumpPage.onUpdate();
     },
   },
   // 工况预案演练
@@ -1492,7 +1470,7 @@ if (login.visible()) {
     },
     select: (id: string) => {
       drillPlanId = id;
-      if (drillPage) drillPage.reload();
+      if (drillPage) drillPage.onUpdate();
     },
   },
   // 统一选择总线（端到端测试 / 调试入口）

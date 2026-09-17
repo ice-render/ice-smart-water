@@ -64,9 +64,43 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
    不需要"登录后才初始化"那套懒加载（少一堆时序坑）。退出登录时记得清 `sessionStorage`。
 7. **一切都在一个 HTML 里，页签靠 `display` 切换**：不要为了"多一个功能模块"再开一个 HTML ——
    那样会多出整页初始化、跨页状态丢失（工况、筛选、编辑都带不过去）与重复加载四件套。
-   新功能＝壳里加一个页签 + 按需在 `PageHandle` 里声明 `islands` / `actions` / `statusTags`。
+   新功能＝壳里加一个页签 + 按需在页面里声明 `islandSpecs()` / `headerActions()` / `statusTags()`
+   （写法见下面「页面写法」）。
 8. **`__water` 这类调试句柄只建一次，业务字段用 getter**：在 `recompute()` 里反复重建它，
    会互相覆盖成"上一帧的快照"（踩过）。
+
+## 页面写法（应用层约定，2026-09-17 确立）
+
+**一页 = 一个继承 `WaterPage` 的类**（`WaterPage extends ICEContainer`，见 `view/WaterPage.ts`）。
+文件名 = 类名，**大驼峰**（`ProcessPage.ts` / `DataPage.ts` …）。四条约定：
+
+1. **建树**：构造结束即建好（库的约定），树**只建一次**；稳定结构（卡片 / 表格 / 字段）
+   不进 `onUpdate()`；
+2. **更新**：`onUpdate()` 是**唯一**改值入口，取代各页自带的 `refresh()` 闭包。数量不定的
+   内容（如审计列表 0~N 条）允许整段重建，但**必须先 `removeChildren` 清空**（库里的坑：
+   不清会新旧文字叠在一起）；
+3. **对外**：`statusTags()` / `islandSpecs()` / `headerActions()` 是**声明式只读访问器** ——
+   宿主在切页 / 刷新时来取一次。页面不拿宿主闭包、不回调宿主、不 import 外壳内部状态。
+4. **文件是纯 OO 的**：页面的版面几何（卡片 / 岛的矩形）是**静态方法**（`DataPage.boardIslandRect`），
+   不是模块级导出函数 —— 入口要在建引擎之前摆岛，那时实例还不存在，所以它是"这个页面类型"的
+   静态知识。**凡是纯 OO 的 ts 文件一律大驼峰命名**（`shell.ts` 这类工具/函数文件保持小写）。
+
+为什么非改不可：老的 `buildXxxPage(ctx, deps)` 工厂返回
+`{ node, islands, actions, statusTags, refresh }` 闭包句柄，12 页写 12 份脚手架
+（全工程 151 处 `addChild`、5 种改值入口、3 种子节点命名）。新写法只有"一个类 + 一个更新
+入口 + 一组声明"，页面之间可以互相读、可以单独测。
+
+**迁移状态：12/12 完成（2026-09-17）**。老的 `buildXxxPage()` 工厂 + `PageHandle` 闭包句柄
+已从外壳**删除**：`ShellPage.build` 现在只收"一个容器"，写一条不合规的页面在类型上就过不去。
+守这条规则的是 `tests/view/pageConvention.test.ts`（文件命名 / 同名类继承 `WaterPage` /
+不许再出现 `buildXxxPage` 与 `refresh()`）。
+
+**还没接的一步**：页面本该在自己的 `onShow()` 里自更新（"显示"是宿主给的事件，见
+ice-web-components `docs/guides/layout.md` 第六节）。现在不行，两件事没就位：
+① 组件库的生命周期钩子还没发版（本地 workspace 的 dist 有，npm 上还没有）；
+② `recompute()` 挂在 `onPageShow` 上、在 `show()` **末尾**执行，显示发生时数据还是上一轮的。
+所以本页的更新仍由宿主在 `shell.refresh()` 路径上驱动。两件事都就位后，
+`WaterPage` 加 `onShow() { this.onUpdate(); }`、外壳去掉切页时的驱动即可。
 
 ## 新增业务模块的口径（改之前先看）
 
