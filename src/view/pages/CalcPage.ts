@@ -61,11 +61,6 @@ export type CalcPageDeps = {
   result: () => ScenarioResult;
 };
 
-const PARAM_WIDTH = 404;
-const RESULT_WIDTH = 344;
-const BOTTOM_HEIGHT = 232;
-const TUNE_WIDTH = 420;
-const ADVICE_WIDTH = 288;
 
 /** 8 行指标的行高。
  *
@@ -73,19 +68,30 @@ const ADVICE_WIDTH = 288;
  * 我原来按 16 写死，于是名称（0~19）与小字提示（18 起）差 3px 相交 —— 实测抓出来的。
  * 现在按实测高度留位：名称 0~19、提示 20~39，正好 40。
  */
-const ROW_HEIGHT = 40;
 
 /** 工艺试算页：设计参数表单 + 脱氮上界曲线（岛）+ 试算结果 + 微调/对照表/提醒。 */
 export class CalcPage extends WaterPage {
+  private static readonly PARAM_WIDTH = 404;
+
+  private static readonly RESULT_WIDTH = 344;
+
+  private static readonly BOTTOM_HEIGHT = 232;
+
+  private static readonly TUNE_WIDTH = 420;
+
+  private static readonly ADVICE_WIDTH = 288;
+
+  private static readonly ROW_HEIGHT = 40;
+
   /** 曲线卡（岛） */
   private static curveCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
     return {
-      left: x0 + PARAM_WIDTH + PAGE_GAP,
+      left: x0 + CalcPage.PARAM_WIDTH + PAGE_GAP,
       top: y0,
-      width: layout.inner.width - PARAM_WIDTH - RESULT_WIDTH - PAGE_GAP * 2,
-      height: layout.inner.height - BOTTOM_HEIGHT - PAGE_GAP,
+      width: layout.inner.width - CalcPage.PARAM_WIDTH - CalcPage.RESULT_WIDTH - PAGE_GAP * 2,
+      height: layout.inner.height - CalcPage.BOTTOM_HEIGHT - PAGE_GAP,
     };
   }
 
@@ -98,14 +104,14 @@ export class CalcPage extends WaterPage {
     return {
       left: layout.content.left + PAGE_PADDING,
       top: layout.content.top + PAGE_PADDING,
-      width: PARAM_WIDTH,
+      width: CalcPage.PARAM_WIDTH,
       height: curve.height,
     };
   }
 
   private static resultCardRect(layout: ShellLayout): Rect {
     const curve = CalcPage.curveCardRect(layout);
-    return { left: curve.left + curve.width + PAGE_GAP, top: curve.top, width: RESULT_WIDTH, height: curve.height };
+    return { left: curve.left + curve.width + PAGE_GAP, top: curve.top, width: CalcPage.RESULT_WIDTH, height: curve.height };
   }
 
   private readonly deps: CalcPageDeps;
@@ -223,7 +229,7 @@ export class CalcPage extends WaterPage {
     resultBody.addChild(this.hero, false);
 
     this.metricRows = scenarioMetrics(deps.result()).map((metric) => {
-      const row = new ICEWidget({ width: innerResultWidth, height: ROW_HEIGHT, fill: false, stroke: false, interactive: false });
+      const row = new ICEWidget({ width: innerResultWidth, height: CalcPage.ROW_HEIGHT, fill: false, stroke: false, interactive: false });
       const name = paragraph(ctx, { left: 0, top: 0, width: 140, text: metric.label, fontSize: 12, color: theme.colors.textSecondary } as any);
       const value = paragraph(ctx, { left: 0, top: 0, width: 120, text: '', fontSize: 13, color: theme.colors.text } as any);
       const hint = paragraph(ctx, { left: 0, top: 0, width: innerResultWidth, text: metric.hint, fontSize: 10.5, color: theme.colors.textTertiary } as any);
@@ -254,7 +260,7 @@ export class CalcPage extends WaterPage {
     /* ================= 下排：参数微调（滑块）/ 对照表 / 工程提醒 ================= */
 
     const bottomTop = y0 + curveRect.height + PAGE_GAP;
-    const tuneRect: Rect = { left: x0, top: bottomTop, width: TUNE_WIDTH, height: BOTTOM_HEIGHT };
+    const tuneRect: Rect = { left: x0, top: bottomTop, width: CalcPage.TUNE_WIDTH, height: CalcPage.BOTTOM_HEIGHT };
     const tuneCard = createCard({ id: 'calc-tune-card', rect: tuneRect, title: '参数微调（滑块与数字框实时同步）' });
     const tuneBody = new ICEWidget({ left: 0, top: 0, width: tuneRect.width, height: tuneRect.height, fill: false, stroke: false, interactive: false });
     tuneCard.addChild(tuneBody, false);
@@ -298,10 +304,10 @@ export class CalcPage extends WaterPage {
     });
 
     const tableRect: Rect = {
-      left: tuneRect.left + TUNE_WIDTH + PAGE_GAP,
+      left: tuneRect.left + CalcPage.TUNE_WIDTH + PAGE_GAP,
       top: bottomTop,
-      width: layout.inner.width - TUNE_WIDTH - ADVICE_WIDTH - PAGE_GAP * 2,
-      height: BOTTOM_HEIGHT,
+      width: layout.inner.width - CalcPage.TUNE_WIDTH - CalcPage.ADVICE_WIDTH - PAGE_GAP * 2,
+      height: CalcPage.BOTTOM_HEIGHT,
     };
     const tableCard = createCard({ id: 'calc-table-card', rect: tableRect, title: '进水 → 出水 → 一级 A 限值' });
     this.table = new ICETable({
@@ -326,8 +332,8 @@ export class CalcPage extends WaterPage {
     const adviceRect: Rect = {
       left: tableRect.left + tableRect.width + PAGE_GAP,
       top: bottomTop,
-      width: ADVICE_WIDTH,
-      height: BOTTOM_HEIGHT,
+      width: CalcPage.ADVICE_WIDTH,
+      height: CalcPage.BOTTOM_HEIGHT,
     };
     const adviceCard = createCard({ id: 'calc-advice-card', rect: adviceRect, title: '工程提醒' });
     this.adviceWidth = adviceRect.width;

@@ -34,20 +34,24 @@ export type LivePageDeps = {
   isRunning: () => boolean;
 };
 
-const STAT_HEIGHT = 100;
-const GAUGE_HEIGHT = 288;
-const STATUS_HEIGHT = 128;
-const RIGHT_WIDTH = 360;
 
 /** 实时监视页：六个读数 + 趋势（岛）+ 仪表（岛）+ 采集状态 + 热力图（岛）。 */
 export class LivePage extends WaterPage {
+  private static readonly STAT_HEIGHT = 100;
+
+  private static readonly GAUGE_HEIGHT = 288;
+
+  private static readonly STATUS_HEIGHT = 128;
+
+  private static readonly RIGHT_WIDTH = 360;
+
   /** 「实时趋势」卡片（岛挖在正文区） */
   private static trendCardRect(layout: ShellLayout): Rect {
     return {
       left: layout.content.left + PAGE_PADDING,
-      top: layout.content.top + PAGE_PADDING + STAT_HEIGHT + PAGE_GAP,
-      width: layout.inner.width - PAGE_GAP - RIGHT_WIDTH,
-      height: layout.inner.height - STAT_HEIGHT - PAGE_GAP,
+      top: layout.content.top + PAGE_PADDING + LivePage.STAT_HEIGHT + PAGE_GAP,
+      width: layout.inner.width - PAGE_GAP - LivePage.RIGHT_WIDTH,
+      height: layout.inner.height - LivePage.STAT_HEIGHT - PAGE_GAP,
     };
   }
 
@@ -58,7 +62,7 @@ export class LivePage extends WaterPage {
   /** 右栏三张卡：仪表（岛）/ 采集状态（纯控件）/ 热力图（岛） */
   private static gaugeCardRect(layout: ShellLayout): Rect {
     const trend = LivePage.trendCardRect(layout);
-    return { left: trend.left + trend.width + PAGE_GAP, top: trend.top, width: RIGHT_WIDTH, height: GAUGE_HEIGHT };
+    return { left: trend.left + trend.width + PAGE_GAP, top: trend.top, width: LivePage.RIGHT_WIDTH, height: LivePage.GAUGE_HEIGHT };
   }
 
   public static gaugeIslandRect(layout: ShellLayout): Rect {
@@ -70,8 +74,8 @@ export class LivePage extends WaterPage {
     return {
       left: gauge.left,
       top: gauge.top + gauge.height + PAGE_GAP,
-      width: RIGHT_WIDTH,
-      height: STATUS_HEIGHT,
+      width: LivePage.RIGHT_WIDTH,
+      height: LivePage.STATUS_HEIGHT,
     };
   }
 
@@ -81,7 +85,7 @@ export class LivePage extends WaterPage {
     return {
       left: status.left,
       top: status.top + status.height + PAGE_GAP,
-      width: RIGHT_WIDTH,
+      width: LivePage.RIGHT_WIDTH,
       height: trend.top + trend.height - (status.top + status.height + PAGE_GAP),
     };
   }
@@ -109,11 +113,11 @@ export class LivePage extends WaterPage {
     const titles = ['进水流量', '溶解氧', '污泥浓度', '出水氨氮', '出水 COD', '风机振动'];
     const icons = ['〜', '◉', '◎', '◈', '◈', '⌁'];
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 6, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: LivePage.STAT_HEIGHT, count: 6, gap: PAGE_GAP });
     this.addChild(statRow, false);
     this.statCards = titles.map((title, index) => {
       const card = new ICEStatCard({
-        height: STAT_HEIGHT,
+        height: LivePage.STAT_HEIGHT,
         icon: icons[index],
         title,
         value: '—',

@@ -48,21 +48,24 @@ export type InspectionPageDeps = {
   operator: () => string;
 };
 
-const STAT_HEIGHT = 96;
-const ROUTE_WIDTH_RATIO = 0.38;
 
-const STATUS_STYLE: Record<InspectionStatus, string> = { pending: 'warning', done: 'success', missed: 'error' };
 
 /** 巡检管理页：四个统计 + 路线到位率（岛）+ 今日任务表。 */
 export class InspectionPage extends WaterPage {
+  private static readonly STAT_HEIGHT = 96;
+
+  private static readonly ROUTE_WIDTH_RATIO = 0.38;
+
+  private static readonly STATUS_STYLE: Record<InspectionStatus, string> = { pending: 'warning', done: 'success', missed: 'error' };
+
   private static routeCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
     return {
       left: x0,
-      top: y0 + STAT_HEIGHT + PAGE_GAP,
-      width: Math.round(layout.inner.width * ROUTE_WIDTH_RATIO),
-      height: layout.inner.height - STAT_HEIGHT - PAGE_GAP,
+      top: y0 + InspectionPage.STAT_HEIGHT + PAGE_GAP,
+      width: Math.round(layout.inner.width * InspectionPage.ROUTE_WIDTH_RATIO),
+      height: layout.inner.height - InspectionPage.STAT_HEIGHT - PAGE_GAP,
     };
   }
 
@@ -94,7 +97,7 @@ export class InspectionPage extends WaterPage {
 
     /* ---------------- 第一行：四个统计 ---------------- */
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 4, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: InspectionPage.STAT_HEIGHT, count: 4, gap: PAGE_GAP });
     this.addChild(statRow, false);
     const statConfigs = [
       { title: '今日计划', icon: '☑', trend: '三条路线', type: 'primary' as const },
@@ -104,7 +107,7 @@ export class InspectionPage extends WaterPage {
     ];
     this.statCards = statConfigs.map((config) => {
       const card = new ICEStatCard({
-        height: STAT_HEIGHT,
+        height: InspectionPage.STAT_HEIGHT,
         icon: config.icon,
         title: config.title,
         value: '0',
@@ -151,7 +154,7 @@ export class InspectionPage extends WaterPage {
               width: 72,
               height: 22,
               text: String(value),
-              status: task ? STATUS_STYLE[task.status] : 'info',
+              status: task ? InspectionPage.STATUS_STYLE[task.status] : 'info',
               variant: 'soft',
             });
           },

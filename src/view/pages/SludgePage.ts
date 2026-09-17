@@ -54,27 +54,30 @@ export type SludgePageDeps = {
   operator: () => string;
 };
 
-const STAT_HEIGHT = 96;
-const FLOW_WIDTH_RATIO = 0.38;
 
-const STATUS_STYLE: Record<ManifestStatus, string> = {
-  issued: 'info',
-  weighed: 'warning',
-  signed: 'primary',
-  closed: 'success',
-};
 
 /** 污泥产运页：五个统计 + 污泥流程（岛）+ 外运联单表。 */
 export class SludgePage extends WaterPage {
+  private static readonly STAT_HEIGHT = 96;
+
+  private static readonly FLOW_WIDTH_RATIO = 0.38;
+
+  private static readonly STATUS_STYLE: Record<ManifestStatus, string> = {
+    issued: 'info',
+    weighed: 'warning',
+    signed: 'primary',
+    closed: 'success',
+  };
+
   /** 「污泥流程」卡片 */
   private static flowCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
     return {
       left: x0,
-      top: y0 + STAT_HEIGHT + PAGE_GAP,
-      width: Math.round(layout.inner.width * FLOW_WIDTH_RATIO),
-      height: layout.inner.height - STAT_HEIGHT - PAGE_GAP,
+      top: y0 + SludgePage.STAT_HEIGHT + PAGE_GAP,
+      width: Math.round(layout.inner.width * SludgePage.FLOW_WIDTH_RATIO),
+      height: layout.inner.height - SludgePage.STAT_HEIGHT - PAGE_GAP,
     };
   }
 
@@ -107,7 +110,7 @@ export class SludgePage extends WaterPage {
 
     /* ---------------- 第一行：五个统计 ---------------- */
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 5, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: SludgePage.STAT_HEIGHT, count: 5, gap: PAGE_GAP });
     this.addChild(statRow, false);
     const statConfigs = [
       { title: '干泥产量', icon: '◍', trend: 'tDS/d', type: 'primary' as const },
@@ -118,7 +121,7 @@ export class SludgePage extends WaterPage {
     ];
     this.statCards = statConfigs.map((config) => {
       const card = new ICEStatCard({
-        height: STAT_HEIGHT,
+        height: SludgePage.STAT_HEIGHT,
         icon: config.icon,
         title: config.title,
         value: '0',
@@ -166,7 +169,7 @@ export class SludgePage extends WaterPage {
               width: 68,
               height: 22,
               text: String(value),
-              status: item ? STATUS_STYLE[item.status] : 'info',
+              status: item ? SludgePage.STATUS_STYLE[item.status] : 'info',
               variant: 'soft',
             });
           },
