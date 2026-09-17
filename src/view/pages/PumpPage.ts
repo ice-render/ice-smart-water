@@ -264,7 +264,7 @@ export class PumpPage extends WaterPage {
     this.statCards[3].setTrend(kpi.startsToday > 12 ? '启停偏多，注意调节' : '运行平稳');
 
     this.table.setData(pumpRows(stations));
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 
   public islandSpecs(): IslandSpec[] {

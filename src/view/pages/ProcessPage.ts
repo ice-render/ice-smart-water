@@ -84,7 +84,7 @@ export class ProcessPage extends WaterPage {
    *
    * 原来是四个写死的 Bootstrap 值（`#198754` / `#ffc107` / `#dc3545` / `#0d6efd`）—— 注释里
    * 写着"与 ICE 主题一致"，但字面量不会随主题走：暗色下这几条进度条还是浅色主题的那套亮度。
-   * 现在只记状态名，取色交给 `theme.colors`（同一份 token，浅深两套自动对）。
+   * 现在只记状态名，取色交给**主题引用**（`token('ui.colors.*')`，浅深两套自动对、热切换跟着走）。
    */
   private static readonly STATUS_TOKEN: Record<string, string> = {
     success: 'success',
@@ -367,7 +367,7 @@ export class ProcessPage extends WaterPage {
             width,
             text: `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`,
             fontSize: 11,
-            color: issue.level === 'error' ? theme.colors.error : theme.colors.warning,
+            color: issue.level === 'error' ? token('ui.colors.error') : token('ui.colors.warning'),
           } as any)
         )
       : [paragraph(ctx, { width, text: '✅ 全厂指标在设计与标准区间内', color: token('ui.colors.success') } as any)];
@@ -484,7 +484,7 @@ export class ProcessPage extends WaterPage {
           height: 8,
           value: Math.round(m.ratio * 100),
           max: 100,
-          color: theme.colors[ProcessPage.STATUS_TOKEN[m.status]] || theme.colors.primary,
+          color: token(`ui.colors.${ProcessPage.STATUS_TOKEN[m.status] || 'primary'}`),
         });
         const value = new ICELabel({
           left: left + width - 74,
@@ -527,7 +527,7 @@ export class ProcessPage extends WaterPage {
           width,
           text: `${d.level === 'error' ? '❌' : '⚠️'} ${d.text}`,
           fontSize: 10,
-          color: d.level === 'error' ? theme.colors.error : theme.colors.warning,
+          color: d.level === 'error' ? token('ui.colors.error') : token('ui.colors.warning'),
         } as any);
         contextBody.addChild(node, false);
         y += (Number(node.state.height) || 18) + 3;

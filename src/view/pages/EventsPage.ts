@@ -411,6 +411,6 @@ export class EventsPage extends WaterPage {
         action: row.status === ALARM_STATUS_LABELS.closed ? '已闭环' : '派单 / 闭环',
       }))
     );
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 }

@@ -414,7 +414,7 @@ function liveTick(): void {
   }
   const summary = summarizeReadings(liveReadings);
   if (livePage) livePage.applyReadings(liveReadings, summary);
-  shell.ice.dirty = true;
+  shell.ice.requestRepaint();
 }
 
 function liveStart(): void {
@@ -585,7 +585,7 @@ function setMode(next: OperatingModeId): void {
     const idle = isIdleInMode(mode, node.state.id);
     if (!!node.state.idle !== idle) node.applyPatch({ idle });
   });
-  graphIce.dirty = true;
+  graphIce.requestRepaint();
   recompute();
 }
 
@@ -631,7 +631,7 @@ function recompute(): void {
   if (islands['drill-compare'].visible()) drillCompare.refresh();
   refreshAlarms();
   shell.refresh();
-  graphIce.dirty = true;
+  graphIce.requestRepaint();
 }
 
 /* ================= 符号图例 ================= */
@@ -877,14 +877,16 @@ const shell = mountShell({
       iconPath: 'M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15',
     },
     /**
-     * 界面主题：**切换 = 记住选择 + 重新加载**。
+     * 界面主题：**就地热换，不刷新**（库 1.15 起支持，本仓在 `handleMenuSelect` 里切）。
      *
-     * 为什么不是就地换色：组件库的主题是**构造期读一次**（见 `view/theme.ts` 的长注释）——
-     * 外壳 / 12 个页面 / 卡片 / 表格全是构造期取色的控件，就地 setTheme 只会换掉"之后新建的"
-     * 那几个，界面会半新半旧。重新加载的代价是一次刷新，换来的是"每一层都拿到新主题"。
+     * 为什么现在能就地换：组件样式槽里放的是**主题引用**（`token('ui.colors.x')`，paint 时解析），
+     * `iceUIManager.setTheme()` 会把新主题广播到所有登记过的引擎实例 —— 外壳 / 页面 / 卡片 / 表格
+     * 一起换，不用重建组件树。
      *
-     * 子项文案带 ✓ 是因为菜单只在开页建一次：切完刷新回来，✓ 自然落到新主题上 ——
-     * 用户不用猜"我现在是哪套"。
+     * ⚠️ 应用侧唯一的纪律：**别把主题对象存下来**（`const theme = getTheme()` 存进字段/上下文）——
+     * 存下来的色值冻在那一刻、热切换不会变。本项目为此专门清过一轮（见 `view/theme.ts` 的长注释）。
+     *
+     * 子项文案带 ✓ 靠运行期改（`ICEMenu.setItemLabel`）：菜单只在开页建一次，热切换不重建它。
      */
     {
       key: 'theme',

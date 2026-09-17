@@ -8,7 +8,6 @@
  */
 import { ICERect, ICEText, token } from 'ice-render';
 import { WATER_SYMBOL_PRESETS, type WaterSymbolKind, type WaterMedium } from 'ice-entity-designer';
-import { iceUIManager } from 'ice-web-components';
 import {
   SYMBOL_CATEGORIES,
   categoryMetaOf,
@@ -109,23 +108,22 @@ export class SymbolLegend {
   private highlightBox: any = null;
   private selectedKind: WaterSymbolKind | null = null;
   private layout: LegendLayout = { cells: [], width: 0, height: 0 };
-  /** 界面底色 / 文字 / 边框都取自主题（构造期读一次，与库的控件同约定）。 */
-  private readonly theme: any;
+  /** 界面底色 / 文字 / 边框都取自**主题引用**（`token('ui.colors.*')`，paint 时解析 → 热切换跟着走）。 */
 
   constructor(options: { ice: any; designer: any }) {
     this.ice = options.ice;
     this.designer = options.designer;
     /**
-     * 取色**在此刻定下来**（与库的控件同一个约定：构造期读一次）。
+     * ⚠️ **不要再把主题对象存下来**（`this.theme = iceUIManager.getTheme()`）。
      *
-     * 这里原来写死了 7 处 UI 颜色（`#ffffff` 卡片底、`#e2e8f0` 分隔线、`#0f172a` /
-     * `#94a3b8` / `#64748b` 三级文字、`#0d6efd` 强调）—— 它们是**界面色**不是符号本身的颜色，
-     * 于是暗色主题下会留一张白卡片、深字压在深底上。改成 token 之后跟着主题走。
+     * 存下来的字面量冻在构造那一刻：切换主题时这块整体不变 —— 实测过（线上切深色，
+     * 图例里有色的 253 个节点**一个颜色都没变**，卡片还是白的、标题还是深字）。
+     * 现在样式槽里放的是**主题引用**（`token('ui.colors.*')`，paint 时由引擎解析），
+     * 所以图例跟着页面主题走，也不需要重建。
      *
      * 符号本身的颜色（`WATER_SYMBOL_PRESETS` 里的域配色）**不动**：那是工艺语义（介质/管径），
      * 不是外观 —— 暗色下也应当保持同一套工艺配色。
      */
-    this.theme = iceUIManager.getTheme();
   }
 
   public render(filter: LegendFilter = 'all'): LegendLayout {
@@ -144,7 +142,7 @@ export class SymbolLegend {
       stroke: false,
       interactive: false,
       linkable: false,
-      style: { fontSize: 20, fillStyle: this.theme.colors.text, textAlign: 'left', textBaseline: 'middle' },
+      style: { fontSize: 20, fillStyle: token('ui.colors.text'), textAlign: 'left', textBaseline: 'middle' },
     });
     this.ice.addChild(title);
 
@@ -172,7 +170,7 @@ export class SymbolLegend {
     const cell = kind ? this.layout.cells.filter((item) => item.kind === kind)[0] : null;
     if (!cell) {
       if (this.highlightBox) this.highlightBox.setState({ display: false });
-      this.ice.dirty = true;
+      this.ice.requestRepaint();
       return null;
     }
     if (!this.highlightBox) {
@@ -185,7 +183,7 @@ export class SymbolLegend {
         interactive: false,
         linkable: false,
         zIndex: 999,
-        style: { fillStyle: this.theme.colors.primaryBg, strokeStyle: this.theme.colors.primary, lineWidth: 2 },
+        style: { fillStyle: token('ui.colors.primaryBg'), strokeStyle: token('ui.colors.primary'), lineWidth: 2 },
       });
       this.ice.addChild(this.highlightBox);
     }
@@ -197,7 +195,7 @@ export class SymbolLegend {
       height: cell.height,
       radius: 10,
     });
-    this.ice.dirty = true;
+    this.ice.requestRepaint();
     return cell;
   }
 
@@ -242,7 +240,7 @@ export class SymbolLegend {
         radius: 1,
         interactive: false,
         linkable: false,
-        style: { fillStyle: this.theme.colors.border, strokeStyle: this.theme.colors.border, lineWidth: 0 },
+        style: { fillStyle: token('ui.colors.border'), strokeStyle: token('ui.colors.border'), lineWidth: 0 },
       })
     );
   }
@@ -258,7 +256,7 @@ export class SymbolLegend {
         radius: 10,
         interactive: false,
         linkable: false,
-        style: { fillStyle: this.theme.colors.surface, strokeStyle: this.theme.colors.border, lineWidth: 1 },
+        style: { fillStyle: token('ui.colors.surface'), strokeStyle: token('ui.colors.border'), lineWidth: 1 },
       })
     );
     this.ice.addChild(
@@ -271,7 +269,7 @@ export class SymbolLegend {
         stroke: false,
         interactive: false,
         linkable: false,
-        style: { fontSize: 11, fillStyle: this.theme.colors.textTertiary, textAlign: 'left', textBaseline: 'middle' },
+        style: { fontSize: 11, fillStyle: token('ui.colors.textTertiary'), textAlign: 'left', textBaseline: 'middle' },
       })
     );
 
@@ -297,7 +295,7 @@ export class SymbolLegend {
         stroke: false,
         interactive: false,
         linkable: false,
-        style: { fontSize: 11, fillStyle: this.theme.colors.textSecondary, textAlign: 'center', textBaseline: 'middle' },
+        style: { fontSize: 11, fillStyle: token('ui.colors.textSecondary'), textAlign: 'center', textBaseline: 'middle' },
       })
     );
   }

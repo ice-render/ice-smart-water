@@ -266,6 +266,6 @@ export class EnergyPage extends WaterPage {
         note: node.note,
       }))
     );
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 }

@@ -302,6 +302,6 @@ export class DrillPage extends WaterPage {
     }
 
     this.table.setData(drillRows(run).map((row) => ({ ...row, note: DrillPage.NOTE_BY_ID[row.id] || '' })));
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 }

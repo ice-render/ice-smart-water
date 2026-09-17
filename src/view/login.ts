@@ -90,15 +90,17 @@ export function mountLogin(options: LoginOptions): LoginHandle {
   canvas.style.height = `${size.height}px`;
 
   const ice = new ICE().init(canvas, { renderMode: 'dirty-rect' });
-  const theme = iceUIManager.getTheme();
   // 引擎侧也要跟上（画布底色 / 选中框 / 手柄 / 对齐引导线 / 阴影都走引擎主题）——
   // 每个 ICE 实例都得自己调一次，库不会替我们传播（见 view/theme.ts 的说明）。
   applyThemeToIce(ice);
   new ICEHoverManager(ice).start();
   getICEFocusManager(ice).start();
 
-  /** 文本辅助（`paragraph` / `sectionHeading`）只用到 ice 与 theme，这里给一个够用的上下文 */
-  const textCtx = { ice, theme, layout: null, toast: () => undefined, notify: () => undefined } as unknown as PageContext;
+  /**
+   * 文本辅助（`paragraph` / `sectionHeading`）只用到 `ice` 与 `layout` —— 颜色一律走
+   * **主题引用**（`token('ui.colors.*')`），所以这里不必、也不该带上主题对象（带上会冻住构造那一刻的色值）。
+   */
+  const textCtx = { ice, layout: null, toast: () => undefined, notify: () => undefined } as unknown as PageContext;
 
   // 不透明底色：登录层是覆盖层，底下的应用不能透出来
   ice.addChild(
@@ -280,7 +282,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
   function setError(text: string): void {
     errorText = text;
     errorLabel.setText(text);
-    ice.dirty = true;
+    ice.requestRepaint();
   }
 
   function submit(): void {
@@ -320,7 +322,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
     ice,
     show(): void {
       canvas.style.display = '';
-      ice.dirty = true;
+      ice.requestRepaint();
       // 让用户一进来就能打字：聚焦到用户名（聚焦会挂原生 input 替身）
       requestAnimationFrame(() => {
         // 切回来时清掉上一次的输入，避免"退出登录后还留着上一个人的名字"

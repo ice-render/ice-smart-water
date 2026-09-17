@@ -266,7 +266,7 @@ export class DataPage extends WaterPage {
         width,
         text: `${issue.level === 'error' ? '❌' : '⚠️'} ${issue.message}`,
         fontSize: 11,
-        color: issue.level === 'error' ? theme.colors.error : theme.colors.warning,
+        color: issue.level === 'error' ? token('ui.colors.error') : token('ui.colors.warning'),
       });
       this.auditBody.addChild(node, false);
       const lines = Math.max(1, Math.ceil((issue.message.length + 3) / (width / 11)));

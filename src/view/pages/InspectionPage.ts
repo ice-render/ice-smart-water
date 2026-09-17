@@ -264,7 +264,7 @@ export class InspectionPage extends WaterPage {
               width: wrap.state.width,
               text: task.note ? `结论：${task.note}` : '尚未登记结论。',
               fontSize: 12,
-              color: task.result === 'hazard' ? theme.colors.error : theme.colors.textSecondary,
+              color: task.result === 'hazard' ? token('ui.colors.error') : token('ui.colors.textSecondary'),
             }),
             false
           );
@@ -331,6 +331,6 @@ export class InspectionPage extends WaterPage {
     this.statCards[3].setTrend(kpi.missed ? `超时率 ${Math.round(kpi.missRate * 100)}%` : '无超时');
 
     this.table.setData(taskRows(tasks));
-    this.pageCtx.ice.dirty = true;
+    this.pageCtx.ice.requestRepaint();
   }
 }

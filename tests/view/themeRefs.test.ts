@@ -29,16 +29,8 @@ const path = require('node:path') as { resolve: (...p: string[]) => string; join
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 
 /** 每个文件允许的 `theme.colors.*` 用量（**当前实测值**，只能下调；改到 0 就从表里删）。 */
-const BUDGET: Record<string, number> = {
-  'view/symbol-legend.ts': 9,
-  'view/pages/ProcessPage.ts': 5,
-  'view/pages/LivePage.ts': 3,
-  'view/pages/AssetPage.ts': 2,
-  'view/pages/CalcPage.ts': 2,
-  'view/pages/DataPage.ts': 2,
-  'view/pages/InspectionPage.ts': 2,
-  'view/shell.ts': 2,
-};
+/** 每个文件允许的 `theme.colors.*` 用量 —— **已经是空的**：应用侧取色全部改成主题引用。 */
+const BUDGET: Record<string, number> = {};
 
 const walk = (dir: string, out: string[] = []): string[] => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
