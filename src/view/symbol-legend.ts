@@ -6,7 +6,7 @@
  *
  * 版面计算（`legendLayout`）是纯函数：不依赖引擎，能单独验证；渲染才是引擎的事。
  */
-import { ICERect, ICEText } from 'ice-render';
+import { ICERect, ICEText, token } from 'ice-render';
 import { WATER_SYMBOL_PRESETS, type WaterSymbolKind, type WaterMedium } from 'ice-entity-designer';
 import { iceUIManager } from 'ice-web-components';
 import {
@@ -230,7 +230,7 @@ export class SymbolLegend {
         stroke: false,
         interactive: false,
         linkable: false,
-        style: { fontSize: 14, fillStyle: this.theme.colors.link, textAlign: 'left', textBaseline: 'middle' },
+        style: { fontSize: 14, fillStyle: token('ui.colors.link'), textAlign: 'left', textBaseline: 'middle' },
       })
     );
     this.ice.addChild(

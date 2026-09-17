@@ -42,6 +42,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type SludgePageDeps = {
   /** 当前 KPI（入口持有，随工况/图纸变化） */
@@ -241,7 +242,7 @@ export class SludgePage extends WaterPage {
               width: wrap.state.width,
               text: `车号 ${item.truck} · 含水率 ${Math.round(item.waterRate * 1000) / 10}% · 折算干泥 ${item.dryTon.toFixed(2)} tDS · PAM ${item.pamKg.toFixed(1)} kg`,
               fontSize: 12,
-              color: theme.colors.text,
+              color: token('ui.colors.text'),
             }),
             false
           );
@@ -253,7 +254,7 @@ export class SludgePage extends WaterPage {
               items: item.actions.map((action) => ({
                 title: action.text,
                 time: `${action.at} · ${action.by}`,
-                color: action.by === '系统' ? theme.colors.textTertiary : theme.colors.link,
+                color: action.by === '系统' ? token('ui.colors.textTertiary') : token('ui.colors.link'),
               })),
             }),
             false

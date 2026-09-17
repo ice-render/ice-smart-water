@@ -53,6 +53,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type CalcPageDeps = {
   initial: ScenarioParams;
@@ -230,9 +231,9 @@ export class CalcPage extends WaterPage {
 
     this.metricRows = scenarioMetrics(deps.result()).map((metric) => {
       const row = new ICEWidget({ width: innerResultWidth, height: CalcPage.ROW_HEIGHT, fill: false, stroke: false, interactive: false });
-      const name = paragraph(ctx, { left: 0, top: 0, width: 140, text: metric.label, fontSize: 12, color: theme.colors.textSecondary } as any);
-      const value = paragraph(ctx, { left: 0, top: 0, width: 120, text: '', fontSize: 13, color: theme.colors.text } as any);
-      const hint = paragraph(ctx, { left: 0, top: 0, width: innerResultWidth, text: metric.hint, fontSize: 10.5, color: theme.colors.textTertiary } as any);
+      const name = paragraph(ctx, { left: 0, top: 0, width: 140, text: metric.label, fontSize: 12, color: token('ui.colors.textSecondary') } as any);
+      const value = paragraph(ctx, { left: 0, top: 0, width: 120, text: '', fontSize: 13, color: token('ui.colors.text') } as any);
+      const hint = paragraph(ctx, { left: 0, top: 0, width: innerResultWidth, text: metric.hint, fontSize: 10.5, color: token('ui.colors.textTertiary') } as any);
       name.setState({ left: 0, top: 0, width: 140 });
       value.setState({ left: innerResultWidth - 120, top: 0, width: 120 });
       hint.setState({ left: 0, top: 20, width: innerResultWidth });
@@ -269,10 +270,10 @@ export class CalcPage extends WaterPage {
     const tuneInnerWidth = tuneRect.width - CARD_INSET * 2;
     const sliderRow = (id: string, min: number, max: number, step: number, value: number, caption: string) => {
       const row = new ICEWidget({ width: tuneInnerWidth, height: 34, fill: false, stroke: false, interactive: false });
-      const label = paragraph(ctx, { left: 0, top: 0, width: 120, text: caption, fontSize: 11, color: theme.colors.textSecondary } as any);
+      const label = paragraph(ctx, { left: 0, top: 0, width: 120, text: caption, fontSize: 11, color: token('ui.colors.textSecondary') } as any);
       // 宽度按"标签 118 + 滑块 + 读数 62 + 间隙"分配：滑块给 196，读数从 326 起（388-62）
       const slider = new ICESlider({ id, value, min, max, step, width: 196, height: 24 });
-      const readout = paragraph(ctx, { left: 0, top: 0, width: 62, text: '', fontSize: 11, color: theme.colors.text } as any);
+      const readout = paragraph(ctx, { left: 0, top: 0, width: 62, text: '', fontSize: 11, color: token('ui.colors.text') } as any);
       label.setState({ left: 0, top: 8, width: 118, height: 16 });
       slider.setState({ left: 122, top: 5, width: 196, height: 24 });
       readout.setState({ left: tuneInnerWidth - 62, top: 8, width: 62 });

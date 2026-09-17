@@ -188,7 +188,7 @@ test.describe('外观主题：真实业务系统里的可用性', () => {
     expect(light).not.toBe(dark);
   });
 
-  test('侧栏「界面主题」能切：真点击 → 落偏好 → 刷新回来还是暗的', async ({ page }) => {
+  test('侧栏「界面主题」能切：**真热换、不刷新** → 落偏好 + 地址栏同步 + ✓ 挪位', async ({ page }) => {
     await page.goto('/');
     await enterApp(page);
     const menu = "window.__water.shell.find('menu')";
@@ -198,17 +198,35 @@ test.describe('外观主题：真实业务系统里的可用性', () => {
     expect(await themeChildLabel(page, 'theme:light')).toContain('✓');
     expect(await themeChildLabel(page, 'theme:dark')).not.toContain('✓');
 
-    // 真点「深色」→ 写偏好 + URL 带参数 + 重新加载
+    /**
+     * **不刷新**的判据：先在页面上留一个"页面级"标记 —— 一旦发生导航 / 重载，它会消失。
+     * （这条是本轮改造的核心：库 1.15.x 支持热切换之后，"切主题 = 重新加载"的拐杖撤掉了。）
+     */
+    await page.evaluate(() => {
+      (window as any).__noReloadMark = 'keep-me';
+    });
+
+    // 真点「深色」→ 就地换主题（画布 + 图表 + DOM 变量）
     await clickWidget(page, '#canvas-shell', `${menu}.getItemNode('theme:dark')`);
-    await page.waitForURL(/theme=dark/, { timeout: 20000 });
-    await enterApp(page);
+    await page.waitForFunction(() => location.search.includes('theme=dark'), undefined, { timeout: 10000 });
+    await page.waitForTimeout(600);
+
+    expect(await page.evaluate(() => (window as any).__noReloadMark), '不该发生页面重载').toBe('keep-me');
     expect(await page.evaluate(() => localStorage.getItem('ice-smart-water:theme'))).toBe('dark');
     expect((await canvasInk(page, '#canvas-shell')).luma).toBeLessThan(100);
 
-    // 刷新回来 ✓ 落到「深色」上（用户不用猜现在是哪套）
+    // ✓ 挪到「深色」上（菜单不重建，靠 setItemLabel 改文案）
     await expandThemeMenu(page, menu);
     expect(await themeChildLabel(page, 'theme:dark')).toContain('✓');
     expect(await themeChildLabel(page, 'theme:light')).not.toContain('✓');
+
+    // 再切回浅色：同样不刷新，颜色与 ✓ 都回来
+    await clickWidget(page, '#canvas-shell', `${menu}.getItemNode('theme:light')`);
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => (window as any).__noReloadMark)).toBe('keep-me');
+    expect((await canvasInk(page, '#canvas-shell')).luma).toBeGreaterThan(200);
+    await expandThemeMenu(page, menu);
+    expect(await themeChildLabel(page, 'theme:light')).toContain('✓');
   });
 
   test('暗色下交互照旧：切页 + 工艺岛缩放平移 + 全程零报错', async ({ page }) => {

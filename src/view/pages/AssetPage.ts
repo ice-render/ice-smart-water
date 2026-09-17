@@ -32,6 +32,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type AssetPageDeps = {
   /** 台账（入口持有；按当前图纸重算） */
@@ -224,7 +225,7 @@ export class AssetPage extends WaterPage {
               width: wrap.state.width,
               text: `投运 ${asset.commissionedAt} · 已运行 ${asset.runningHours.toLocaleString('en-US')} h · 装机 ${asset.power} kW · 可用率 ${Math.round(asset.availability * 100)}% · ${asset.criticality === 'high' ? '关键设备' : '一般设备'} · ${asset.maintenance.label} 下次到期 ${asset.maintenance.nextAt}`,
               fontSize: 12,
-              color: theme.colors.text,
+              color: token('ui.colors.text'),
             }),
             false
           );

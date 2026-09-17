@@ -131,26 +131,36 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
 > 边界、入口决策表、验收清单、常见坑）单一来源是
 > `ice-web-components/docs/guides/app-pages.md`。本仓的「页面写法」只记**本仓特有**的部分。
 
-## 外观主题（2026-09-17 立）：**切换 = 记住选择 + 重新加载**
+## 外观主题（2026-09-17 立，同日改为**热切换**）
 
 入口在侧栏「**界面主题**」（浅色 / 深色，子项文案带 ✓ 标出当前那套）。实现与口径：
 
 | 件 | 落点 | 说明 |
 |---|---|---|
-| 主题模块（读 / 装 / 打到引擎 / 切换） | `src/view/theme.ts` | `?theme=` → localStorage → 默认 light；非法值落回默认 |
+| 主题模块（读 / 装 / 打到引擎 / 热切换） | `src/view/theme.ts` | `?theme=` → localStorage → 默认 light；非法值落回默认 |
 | 安装时机 | `src/entries/login-boot.ts` 的**第一行** | 必须早于任何组件构造 —— 主题是**构造期读一次** |
 | DOM 那半（启动遮罩 / 页面底色） | `public/index.html` head 的**内联脚本** + `[data-theme='dark']` CSS | 遮罩先于 JS，所以不能等 TS；key 与解析口径由 `tests/view/theme.test.ts` 钉住 |
 | 引擎那半（画布底色 / 选中框 / 手柄 / 引导线 / 阴影） | 每个 `new ICE()` 之后 `applyThemeToIce(ice)` | 本工程 6+ 个实例：外壳、登录门、两个设计器岛、覆盖画布、每张图表（`board.ts` 里建完图立刻打） |
 | 图表 | option 写 `theme: 'auto'` | 明暗由**图表自己那个引擎实例**的背景亮度判定；反过来 `theme:'light'` 会让图标永远是浅色 |
 | 验收 | `e2e/theme.spec.ts`（6 条） | 见下 |
 
-### 为什么不能"就地换色"（这是本机制最重要的事实）
+### 热切换怎么成立的（这是本机制最重要的一段）
 
-组件库的主题**在构造期读一次**（`ice-web-components/docs/guides/theming.md`）：`iceUIManager.setTheme()`
-只影响**之后**新建的控件。本工程界面几乎全是构造期取色的控件（外壳、12 个页面、卡片、表格、
-分段控件、菜单），就地换色会得到**半新半旧**的界面 —— 比不支持切换更糟。所以切换 = 写偏好 +
-`location.reload()`，重新构造整棵树。（引擎那一层其实能热换：`setTheme` 会置脏重绘，
-`ice-chart` 的 `auto` 还会订阅引擎主题变化 —— 但控件层不行，界面必须整体一致。）
+**库 1.15.0 起**：组件样式里的颜色是**主题引用**（`token('ui.colors.x')`），引擎在 **paint 时**解析；
+`iceUIManager.setTheme()` 还会**广播到所有登记过的引擎实例**（`applyThemeToIce()` 时登记）。
+于是换主题 = 改表 + 标脏 + 下一帧重画，**不用重建组件树**。
+
+⚠️ **前提：界面里不能有停在旧主题上的颜色** —— 也就是本仓自己的取色也必须写成引用式。
+2026-09-17 实测过差别：应用侧 43 处样式槽迁之前，热切换后外壳亮度 **113**（完整暗色应为 ~48），
+差的那些就是没迁的构造期取色；迁完再测就落回暗色区间。所以：
+
+- **本仓自己的取色一律用 `token('ui.colors.x')`**（`theme.colors.x` 只在**派生计算**里用，
+  e.g. 混色 / 条件取色 / 表格列定义）；
+- 棘轮 `tests/view/themeRefs.test.ts` 按文件记预算（当前 **27 处 / 8 个文件**，只减不增）；
+- 派生色将来要跟随，就挂 `iceUIManager.onThemeChange()` 重算（库的 `ICEWidget.onThemeChange()` 同源）。
+
+切换时另外两件收尾：`history.replaceState` 把 `?theme=` 同步进地址栏（分享链接仍然是当前这套，且
+**不产生历史记录、不触发导航**）；`ICEMenu.setItemLabel()` 把 ✓ 挪到新主题那一项上（菜单不重建）。
 
 ### 暗色下的两个真实漏水点（都踩过并修掉）
 

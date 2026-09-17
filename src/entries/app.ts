@@ -939,8 +939,23 @@ const shell = mountShell({
     }
     if (key.indexOf('theme:') === 0) {
       const next = key.replace('theme:', '') as 'light' | 'dark';
-      // 已经是这套主题就不要白刷一次（菜单项里的 ✓ 就是当前主题）
-      if (next !== themeName()) switchTheme(next);
+      if (next === themeName()) return;
+      /**
+       * **就地热换，不刷新**（库 1.15.x 起支持）。
+       *
+       * 三件收尾：
+       * 1. 菜单里的 ✓ 要挪到新主题那一项上 —— 菜单是开页建的，热切换不会重建它，
+       *    所以用 `ICEMenu.setItemLabel()` 改文案（子项没展开时也有效：它改的是 `items` 本身）；
+       * 2. 给用户一个"真的切了"的反馈（顶部消息，3 秒后自己消失）；
+       * 3. 其余（画布 / 图表 / DOM 变量 / 地址栏 / 偏好）都在 `switchTheme()` 里。
+       */
+      switchTheme(next);
+      const menu = shell.find('menu');
+      if (menu && typeof menu.setItemLabel === 'function') {
+        menu.setItemLabel('theme:light', next === 'light' ? '浅色 ✓' : '浅色');
+        menu.setItemLabel('theme:dark', next === 'dark' ? '深色 ✓' : '深色');
+      }
+      shell.toast(next === 'dark' ? '已切换到深色主题（无需刷新）' : '已切换到浅色主题（无需刷新）');
       return;
     }
     if (key === 'logout') {

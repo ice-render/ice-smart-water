@@ -45,6 +45,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type EventsPageDeps = {
   /** 取当前报警清单（由入口持有状态） */
@@ -269,7 +270,7 @@ export class EventsPage extends WaterPage {
               width: wrap.state.width,
               text: `建议处置：${event.advice}`,
               fontSize: 12,
-              color: theme.colors.text,
+              color: token('ui.colors.text'),
             }),
             false
           );
@@ -281,7 +282,7 @@ export class EventsPage extends WaterPage {
               items: event.actions.map((action) => ({
                 title: action.text,
                 time: `${action.at} · ${action.by}`,
-                color: action.by === '系统' ? theme.colors.textTertiary : theme.colors.link,
+                color: action.by === '系统' ? token('ui.colors.textTertiary') : token('ui.colors.link'),
               })),
             }),
             false

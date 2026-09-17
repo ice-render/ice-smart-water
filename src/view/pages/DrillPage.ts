@@ -25,6 +25,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type DrillPageDeps = {
   /** 当前预案 id（入口持有） */
@@ -280,7 +281,7 @@ export class DrillPage extends WaterPage {
         width: this.stepsBody.state.width - 8,
         text: `${index + 1}. ${step}`,
         fontSize: 12,
-        color: theme.colors.textSecondary,
+        color: token('ui.colors.textSecondary'),
       });
       this.stepsBody.addChild(node, false);
       top += Number(node.state.height) + 6;
@@ -294,7 +295,7 @@ export class DrillPage extends WaterPage {
           width: this.stepsBody.state.width - 8,
           text: warn,
           fontSize: 12,
-          color: theme.colors.error,
+          color: token('ui.colors.error'),
         }),
         false
       );

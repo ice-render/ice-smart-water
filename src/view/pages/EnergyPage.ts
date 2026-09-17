@@ -23,6 +23,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type EnergyPageDeps = {
   energy: () => EnergyKpi;
@@ -182,7 +183,7 @@ export class EnergyPage extends WaterPage {
               width: wrap.state.width,
               text: `归入该分项的设备：${node.tags.join('、') || '—'}`,
               fontSize: 12,
-              color: theme.colors.text,
+              color: token('ui.colors.text'),
             }),
             false
           );

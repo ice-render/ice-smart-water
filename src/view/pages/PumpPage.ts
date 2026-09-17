@@ -30,6 +30,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type PumpPageDeps = {
   stations: () => PumpStationData[];
@@ -228,7 +229,7 @@ export class PumpPage extends WaterPage {
             width: wrap.state.width,
             text: `介质 ${pump.medium} · 额定 ${pump.ratedFlow} m³/h / ${pump.ratedHead} m / ${pump.ratedPower} kW · 今日启停 ${pump.starts} 次 · 累计运行 ${pump.runtimeH.toFixed(1)} h`,
             fontSize: 12,
-            color: theme.colors.text,
+            color: token('ui.colors.text'),
           }),
           false
         );
