@@ -22,11 +22,14 @@ import {
   createCard,
   createStatRow,
   paragraph,
+  type HeaderActionSpec,
+  type IslandSpec,
   type PageContext,
-  type PageHandle,
   type Rect,
   type ShellLayout,
+  type StatusTagSpec,
 } from '../shell';
+import { WaterPage } from '../WaterPage';
 
 export type PumpPageDeps = {
   stations: () => PumpStationData[];
@@ -37,73 +40,65 @@ export type PumpPageDeps = {
   overrides: () => Record<string, boolean>;
 };
 
-export type PumpPageHandle = PageHandle & {
-  reload: () => void;
-  /** e2e 用 */
-  metrics: () => PumpKpi;
-};
-
 const STAT_HEIGHT = 96;
 const ISLAND_ROW_RATIO = 0.54;
 
-export function pumpCurveCardRect(layout: ShellLayout): Rect {
-  const x0 = layout.content.left + PAGE_PADDING;
-  const y0 = layout.content.top + PAGE_PADDING;
-  const row2Top = y0 + STAT_HEIGHT + PAGE_GAP;
-  const rest = layout.inner.height - STAT_HEIGHT - PAGE_GAP * 2;
-  const width = Math.round((layout.inner.width - PAGE_GAP) / 2);
-  return { left: x0, top: row2Top, width, height: Math.round(rest * ISLAND_ROW_RATIO) };
-}
+/** 泵站监视页：四个统计 + 两张图（岛）+ 泵组清单表。 */
+export class PumpPage extends WaterPage {
+  private static pumpCurveCardRect(layout: ShellLayout): Rect {
+    const x0 = layout.content.left + PAGE_PADDING;
+    const y0 = layout.content.top + PAGE_PADDING;
+    const row2Top = y0 + STAT_HEIGHT + PAGE_GAP;
+    const rest = layout.inner.height - STAT_HEIGHT - PAGE_GAP * 2;
+    const width = Math.round((layout.inner.width - PAGE_GAP) / 2);
+    return { left: x0, top: row2Top, width, height: Math.round(rest * ISLAND_ROW_RATIO) };
+  }
 
-export function pumpCurveIslandRect(layout: ShellLayout): Rect {
-  return cardBodyRect(pumpCurveCardRect(layout));
-}
+  public static pumpCurveIslandRect(layout: ShellLayout): Rect {
+    return cardBodyRect(PumpPage.pumpCurveCardRect(layout));
+  }
 
-export function sumpLevelCardRect(layout: ShellLayout): Rect {
-  const curve = pumpCurveCardRect(layout);
-  return { left: curve.left + curve.width + PAGE_GAP, top: curve.top, width: curve.width, height: curve.height };
-}
+  private static sumpLevelCardRect(layout: ShellLayout): Rect {
+    const curve = PumpPage.pumpCurveCardRect(layout);
+    return { left: curve.left + curve.width + PAGE_GAP, top: curve.top, width: curve.width, height: curve.height };
+  }
 
-export function sumpLevelIslandRect(layout: ShellLayout): Rect {
-  return cardBodyRect(sumpLevelCardRect(layout));
-}
+  public static sumpLevelIslandRect(layout: ShellLayout): Rect {
+    return cardBodyRect(PumpPage.sumpLevelCardRect(layout));
+  }
 
-export function pumpTableCardRect(layout: ShellLayout): Rect {
-  const curve = pumpCurveCardRect(layout);
-  return {
-    left: curve.left,
-    top: curve.top + curve.height + PAGE_GAP,
-    width: layout.inner.width,
-    height: layout.inner.height - STAT_HEIGHT - curve.height - PAGE_GAP * 2,
-  };
-}
+  private static pumpTableCardRect(layout: ShellLayout): Rect {
+    const curve = PumpPage.pumpCurveCardRect(layout);
+    return {
+      left: curve.left,
+      top: curve.top + curve.height + PAGE_GAP,
+      width: layout.inner.width,
+      height: layout.inner.height - STAT_HEIGHT - curve.height - PAGE_GAP * 2,
+    };
+  }
 
-export function buildPumpPage(ctx: PageContext, deps: PumpPageDeps): PumpPageHandle {
-  const { theme, layout } = ctx;
-  const x0 = layout.content.left + PAGE_PADDING;
-  const y0 = layout.content.top + PAGE_PADDING;
+  private readonly deps: PumpPageDeps;
+  private readonly statCards: ICEStatCard[];
+  private readonly table: ICETable;
 
-  const page = new ICEWidget({
-    left: 0,
-    top: 0,
-    width: layout.content.width,
-    height: layout.content.height,
-    fill: false,
-    stroke: false,
-    interactive: false,
-  });
+  constructor(ctx: PageContext, deps: PumpPageDeps) {
+    super(ctx);
+    this.deps = deps;
+    const { theme, layout } = ctx;
+    const x0 = layout.content.left + PAGE_PADDING;
+    const y0 = layout.content.top + PAGE_PADDING;
 
   /* ---------------- 第一行：四个统计 ---------------- */
   // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
   const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 4, gap: PAGE_GAP });
-  page.addChild(statRow, false);
+    this.addChild(statRow, false);
   const statConfigs = [
     { title: '运行 / 备用', icon: '◎', trend: '泵组状态', type: 'primary' as const },
     { title: '总提升流量', icon: '⇅', trend: '运行泵合计', type: 'info' as const },
     { title: '单位提升电耗', icon: '◔', trend: 'kWh/千m³', type: 'success' as const },
     { title: '今日启停', icon: '⏻', trend: '运行稳定度', type: 'warning' as const },
   ];
-  const statCards = statConfigs.map((config, index) => {
+  this.statCards = statConfigs.map((config, index) => {
     const card = new ICEStatCard({
       height: STAT_HEIGHT,
       icon: config.icon,
@@ -119,27 +114,27 @@ export function buildPumpPage(ctx: PageContext, deps: PumpPageDeps): PumpPageHan
   /* ---------------- 第二行：两张图（岛） ---------------- */
   const curveCard = createCard({
     id: 'pump-curve-card',
-    rect: pumpCurveCardRect(layout),
+    rect: PumpPage.pumpCurveCardRect(layout),
     title: '泵特性：效率与流量随转速变化',
   });
-  page.addChild(curveCard, false);
+    this.addChild(curveCard, false);
 
   const levelCard = createCard({
     id: 'sump-level-card',
-    rect: sumpLevelCardRect(layout),
+    rect: PumpPage.sumpLevelCardRect(layout),
     title: '集水井液位：高低报警线之间运行',
   });
-  page.addChild(levelCard, false);
+    this.addChild(levelCard, false);
 
   /* ---------------- 第三行：泵组表 ---------------- */
-  const tableRect = pumpTableCardRect(layout);
+  const tableRect = PumpPage.pumpTableCardRect(layout);
   const pumpFor = (pumpId: string) =>
     deps
       .stations()
       .flatMap((station) => station.pumps)
       .filter((pump) => pump.id === pumpId)[0];
 
-  const table = new ICETable({
+  this.table = new ICETable({
     id: 'pump-table',
     left: CARD_INSET,
     top: 46,
@@ -190,9 +185,9 @@ export function buildPumpPage(ctx: PageContext, deps: PumpPageDeps): PumpPageHan
             variant: pump && pump.running ? 'default' : 'primary',
           });
           button.on('click', () => {
-            deps.onToggle(String(row.id));
-            reload();
-            ctx.toast(
+            this.deps.onToggle(String(row.id));
+            this.onUpdate();
+            this.pageCtx.toast(
               `${pump ? pump.tag : row.id} 已${pump && pump.running ? '停运' : '投运'}，需求在运行泵之间重新平摊`
             );
           });
@@ -245,64 +240,69 @@ export function buildPumpPage(ctx: PageContext, deps: PumpPageDeps): PumpPageHan
     rect: tableRect,
     title: '泵组清单（点行展开铭牌与今日运行；可人工投运 / 停运）',
   });
-  tableCard.addChild(table, false);
-  page.addChild(tableCard, false);
+    tableCard.addChild(this.table, false);
+    this.addChild(tableCard, false);
 
-  /* ---------------- 刷新 ---------------- */
-  function reload(): void {
-    const stations = deps.stations();
-    const kpi = pumpKpi(stations);
-    statCards[0].setValue(`${kpi.running} / ${kpi.standby}`);
-    statCards[0].setTrend(`装机 ${kpi.ratedPower.toFixed(0)} kW · 当前 ${kpi.runningPower.toFixed(0)} kW`);
-    statCards[1].setValue(kpi.totalFlow.toFixed(0));
-    statCards[1].setTrend(`${kpi.totalFlow.toFixed(0)} m³/h（运行泵合计）`);
-    statCards[2].setValue(kpi.specificEnergy.toFixed(2));
-    statCards[2].setTrend('kWh/千m³（越低越省）');
-    statCards[3].setValue(String(kpi.startsToday));
-    statCards[3].setTrend(kpi.startsToday > 12 ? '启停偏多，注意调节' : '运行平稳');
-
-    table.setData(pumpRows(stations));
-    ctx.ice.dirty = true;
+    // 「构造结束即画好」：先渲染一次，页面上任何时刻读到的都是最新数据
+    this.onUpdate();
   }
 
-  reload();
+  /** 唯一改值入口。 */
+  public onUpdate(): void {
+    const stations = this.deps.stations();
+    const kpi = pumpKpi(stations);
+    this.statCards[0].setValue(`${kpi.running} / ${kpi.standby}`);
+    this.statCards[0].setTrend(`装机 ${kpi.ratedPower.toFixed(0)} kW · 当前 ${kpi.runningPower.toFixed(0)} kW`);
+    this.statCards[1].setValue(kpi.totalFlow.toFixed(0));
+    this.statCards[1].setTrend(`${kpi.totalFlow.toFixed(0)} m³/h（运行泵合计）`);
+    this.statCards[2].setValue(kpi.specificEnergy.toFixed(2));
+    this.statCards[2].setTrend('kWh/千m³（越低越省）');
+    this.statCards[3].setValue(String(kpi.startsToday));
+    this.statCards[3].setTrend(kpi.startsToday > 12 ? '启停偏多，注意调节' : '运行平稳');
 
-  return {
-    node: page,
-    islands: [
-      { id: 'pump-curve', rect: pumpCurveIslandRect(layout) },
-      { id: 'sump-level', rect: sumpLevelIslandRect(layout) },
-    ],
-    actions: [
+    this.table.setData(pumpRows(stations));
+    this.pageCtx.ice.dirty = true;
+  }
+
+  public islandSpecs(): IslandSpec[] {
+    return [
+      { id: 'pump-curve', rect: PumpPage.pumpCurveIslandRect(this.pageCtx.layout) },
+      { id: 'sump-level', rect: PumpPage.sumpLevelIslandRect(this.pageCtx.layout) },
+    ];
+  }
+
+  public headerActions(): HeaderActionSpec[] {
+    return [
       {
         key: 'pump-reset',
         label: '恢复默认泵组',
         onClick: () => {
-          deps.onReset();
-          reload();
-          ctx.toast('泵组已恢复默认（工作泵运行、备用泵热备用）');
+          this.deps.onReset();
+          this.onUpdate();
+          this.pageCtx.toast('泵组已恢复默认（工作泵运行、备用泵热备用）');
         },
       },
-    ],
-    statusTags: () => {
-      const kpi = pumpKpi(deps.stations());
-      return [
-        {
-          text: kpi.levelAlarm ? '液位越限' : '液位正常',
-          status: kpi.levelAlarm ? 'error' : 'success',
-          width: 108,
-        },
-        {
-          text: `最高液位 ${Math.round(kpi.worstLevel * 100)}%（高线 ${Math.round(SUMP_LEVEL_HIGH * 100)}% / 低线 ${Math.round(SUMP_LEVEL_LOW * 100)}%）`,
-          status: 'info',
-          width: 268,
-        },
-      ];
-    },
-    reload,
-    metrics: () => pumpKpi(deps.stations()),
-    refresh(): void {
-      reload();
-    },
-  };
+    ];
+  }
+
+  public statusTags(): StatusTagSpec[] {
+    const kpi = pumpKpi(this.deps.stations());
+    return [
+      {
+        text: kpi.levelAlarm ? '液位越限' : '液位正常',
+        status: kpi.levelAlarm ? 'error' : 'success',
+        width: 108,
+      },
+      {
+        text: `最高液位 ${Math.round(kpi.worstLevel * 100)}%（高线 ${Math.round(SUMP_LEVEL_HIGH * 100)}% / 低线 ${Math.round(SUMP_LEVEL_LOW * 100)}%）`,
+        status: 'info',
+        width: 268,
+      },
+    ];
+  }
+
+  /** e2e 用 */
+  public metrics(): PumpKpi {
+    return pumpKpi(this.deps.stations());
+  }
 }

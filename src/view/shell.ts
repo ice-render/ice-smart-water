@@ -31,6 +31,7 @@ import {
   iceUIManager,
   mountICEAccessibilityMirror,
 } from 'ice-web-components';
+import type { PageContent } from './WaterPage';
 
 /** 设计尺寸下限：窗口比它小就整页滚动（与 admin.html 同策略，换来"外壳坐标恒定、岛不用跟着重排"） */
 export const MIN_CANVAS_WIDTH = 1440;
@@ -99,20 +100,34 @@ export type StatusTagSpec = { text: string; status: string; width?: number };
 export type ShellPage = {
   key: string;
   label: string;
-  build: (ctx: PageContext) => PageHandle;
+  /** 造一页：**页面自己就是容器**（`PageContent` = 容器 + 几个只读声明），见 `view/WaterPage.ts`。 */
+  build: (ctx: PageContext) => PageContent;
 };
 
-export type PageHandle = {
+/**
+ * 外壳内部的页面视图：把页面上的**可选**声明补成可调用的形状。
+ *
+ * 为什么不各自 if 一遍：切页路径上有 5 处要问页面（岛 / 状态标签 / 按钮 / 重算 / 节点）。
+ */
+type MountedPage = {
   node: any;
-  islands?: IslandSpec[];
-  actions?: HeaderActionSpec[];
-  /**
-   * 顶栏状态标签**由页面自己声明**（每页关心的东西不一样：工艺图页关心工况与流径，
-   * 符号库页关心符号数量）。切页与 `refresh()` 时外壳会重新取一次。
-   */
-  statusTags?: () => StatusTagSpec[];
-  refresh?: () => void;
+  islands: () => IslandSpec[];
+  statusTags: () => StatusTagSpec[];
+  actions: () => HeaderActionSpec[];
+  update: () => void;
 };
+
+function toMountedPage(page: PageContent): MountedPage {
+  return {
+    node: page,
+    islands: () => (page.islandSpecs ? page.islandSpecs() : []),
+    statusTags: () => (page.statusTags ? page.statusTags() : []),
+    actions: () => (page.headerActions ? page.headerActions() : []),
+    update: () => {
+      if (page.onUpdate) page.onUpdate();
+    },
+  };
+}
 
 export type PageContext = {
   ice: any;
@@ -145,7 +160,7 @@ export type ShellHandle = {
   /**
    * 手动设置顶栏状态标签。
    *
-   * **一般不用调**：页面在 `PageHandle.statusTags` 里声明自己的标签，切页与 `refresh()` 时
+   * **一般不用调**：页面在 `statusTags()` 里声明自己的标签，切页与 `refresh()` 时
    * 外壳会自己取。这个入口留给"外壳外的状态"（比如全局连接状态）用。
    */
   setStatusTags: (tags: Array<{ text: string; status: string; width?: number }>) => void;
@@ -579,10 +594,10 @@ export function mountShell(options: ShellOptions): ShellHandle {
    * 症状是"卡片画在右边偏 264px，而岛还留在原地"，卡片和洞对不上。
    */
   const isles: Record<string, Rect> = {};
-  const pageNodes: Record<string, any> = {};
+  const pageNodes: Record<string, MountedPage> = {};
   let currentKey = '';
   let currentPage: ShellPage | null = null;
-  let currentHandle: PageHandle | null = null;
+  let currentHandle: MountedPage | null = null;
   /** 当前域 key（v2 两级导航） */
   let currentDomainKey = '';
   /** 每个域上次停留的页（切域回来时回到原处，而不是永远跳第一页） */
@@ -590,7 +605,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
 
   function collectIslands(): void {
     Object.keys(isles).forEach((key) => delete isles[key]);
-    (currentHandle && currentHandle.islands ? currentHandle.islands : []).forEach((island) => {
+    (currentHandle ? currentHandle.islands() : []).forEach((island) => {
       isles[island.id] = island.rect;
     });
   }
@@ -602,10 +617,11 @@ export function mountShell(options: ShellOptions): ShellHandle {
     if (!domain) throw new Error(`页面「${key}」没有归入任何域（检查 ShellOptions.domains）`);
     // 页面节点懒构建：建好之后一直挂着，靠 display 切换（与 admin.html 同策略）
     if (!pageNodes[key]) {
-      const handle = page.build({ ice, theme, layout, toast, notify });
-      handle.node.setState({ display: true });
-      ice.addChild(handle.node);
-      pageNodes[key] = { node: handle.node, handle };
+      const mounted = toMountedPage(page.build({ ice, theme, layout, toast, notify }));
+      // 先挂载（onMount）再显示（onShow）：顺序反了，页面就拿不到"这是首次显示"这个事件。
+      ice.addChild(mounted.node);
+      mounted.node.setState({ display: true });
+      pageNodes[key] = mounted;
     }
     // 切换显示
     Object.keys(pageNodes).forEach((otherKey) => {
@@ -613,7 +629,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     });
     currentKey = key;
     currentPage = page;
-    currentHandle = pageNodes[key].handle;
+    currentHandle = pageNodes[key];
     // 两级导航：**换域才重建页签**，同域内切页只改高亮 + 选中的域项
     if (currentDomainKey !== domain.key) {
       renderPageTabs(domain, key);
@@ -625,7 +641,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     domainLabel.setText(domain.label);
     menu.setSelectedKey(domain.key);
     pageTitle.setText(page.label);
-    setActions((currentHandle && currentHandle.actions) || []);
+    setActions(currentHandle ? currentHandle.actions() : []);
     applyPageTags();
     collectIslands();
     if (options.onIslands) options.onIslands(Object.keys(isles).map((id) => ({ id, rect: isles[id] })));
@@ -643,12 +659,12 @@ export function mountShell(options: ShellOptions): ShellHandle {
 
   /** 取当前页声明的状态标签（页面没声明就清空） */
   function applyPageTags(): void {
-    setStatusTags(currentHandle && currentHandle.statusTags ? currentHandle.statusTags() : []);
+    setStatusTags(currentHandle ? currentHandle.statusTags() : []);
   }
 
   function refresh(): void {
     // 先重排页面内容，再让岛对齐卡片（岛的洞是按卡片矩形算的，卡片动了洞就动）
-    if (currentHandle && typeof currentHandle.refresh === 'function') currentHandle.refresh();
+    if (currentHandle) currentHandle.update();
     applyPageTags();
     ice.dirty = true;
   }
