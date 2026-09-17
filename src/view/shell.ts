@@ -9,7 +9,7 @@
  *    整个场景一起位移，图表库自己 new 一个引擎），所以它们是**独立画布**，按外壳坐标绝对定位、
  *    嵌在卡片的"洞"里。见 `islands.ts`。
  */
-import { ICE, ICEGridLayout } from 'ice-render';
+import { ICE, ICEGridLayout, token, type ICEThemeTokenRef } from 'ice-render';
 import {
   ICEAvatar,
   ICEButton,
@@ -352,7 +352,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
       fill: true,
       stroke: false,
       // 页面底色取主题的 background token（原来写死 #f8f9fa：暗色下会留一块浅色底）
-      style: { fillStyle: theme.colors.background },
+      style: { fillStyle: token('ui.colors.background') },
     })
   );
 
@@ -364,7 +364,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     width: SIDEBAR_WIDTH,
     height: layout.canvas.height,
     radius: 0,
-    style: { fillStyle: theme.colors.surface, strokeStyle: theme.colors.border },
+    style: { fillStyle: token('ui.colors.surface'), strokeStyle: token('ui.colors.border') },
   });
   const brand = new ICELabel({
     left: 24,
@@ -372,14 +372,15 @@ export function mountShell(options: ShellOptions): ShellHandle {
     text: options.brand,
     // 品牌标题是**文字**：用 `link` 那一档（`primary` 是填充色，压在暗色卡片上只有 2.96:1）。
     // 判据与分工见 ice-web-components 的 docs/guides/theming.md §1.1。
-    style: { fontSize: 20, fontWeight: '700', fillStyle: theme.colors.link },
+    // 主题引用（paint 时解析）：热切换时这一处也跟着换，不需要重建页面
+    style: { fontSize: 20, fontWeight: '700', fillStyle: token('ui.colors.link') },
   });
   const brandSub = new ICELabel({
     left: 24,
     top: 48,
     width: 216,
     text: options.brandSub,
-    style: { fontSize: 11, wrap: true, lineHeight: 16, fillStyle: theme.colors.textSecondary },
+    style: { fontSize: 11, wrap: true, lineHeight: 16, fillStyle: token('ui.colors.textSecondary') },
   });
   const footerTop = layout.canvas.height - 96;
   const sidebarFooter: any[] = [];
@@ -391,7 +392,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
       left: 64,
       top: footerTop + 16,
       text: options.footer.name,
-      style: { fontSize: 13, fontWeight: '600', fillStyle: theme.colors.text },
+      style: { fontSize: 13, fontWeight: '600', fillStyle: token('ui.colors.text') },
     });
     const role = new ICELabel({
       id: 'footer-role',
@@ -399,7 +400,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
       top: footerTop + 36,
       width: 184,
       text: options.footer.role,
-      style: { fontSize: 11, wrap: true, lineHeight: 15, fillStyle: theme.colors.textSecondary },
+      style: { fontSize: 11, wrap: true, lineHeight: 15, fillStyle: token('ui.colors.textSecondary') },
     });
     footerNodes = { avatar, name, role };
     sidebarFooter.push(new ICESeparator({ left: 16, top: footerTop, width: 232, height: 1 }), avatar, name, role);
@@ -433,7 +434,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     width: 232,
     items: menuItems,
     selectedKey: (domainOfPage(options.selectedKey) || domains[0] || { key: '' }).key,
-    style: { fillStyle: theme.colors.surface },
+    style: { fillStyle: token('ui.colors.surface') },
     onSelect: (item: any) => options.onMenuSelect(item.key, item),
     onExpand: (key: string, expanded: boolean) => {
       if (options.onMenuExpand) options.onMenuExpand(key, expanded);
@@ -450,7 +451,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     width: content.width,
     height: HEADER_HEIGHT,
     radius: 0,
-    style: { fillStyle: theme.colors.surface, strokeStyle: theme.colors.border },
+    style: { fillStyle: token('ui.colors.surface'), strokeStyle: token('ui.colors.border') },
   });
   const hamburger = new ICEIcon({
     id: 'hamburger',
@@ -458,7 +459,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     top: 20,
     size: 24,
     icon: '☰',
-    color: theme.colors.textSecondary,
+    color: token('ui.colors.textSecondary'),
   });
   const pageTitle = new ICELabel({
     left: 56,
@@ -466,7 +467,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     height: 26,
     verticalAlign: 'middle',
     text: '',
-    style: { fontSize: 18, fontWeight: '600', fillStyle: theme.colors.text },
+    style: { fontSize: 18, fontWeight: '600', fillStyle: token('ui.colors.text') },
   });
   /**
    * 顶栏第二行 = 两级导航的落脚点：左边是当前**域**名，右边是该域的**页签**（`ICESegmented`）。
@@ -482,7 +483,7 @@ export function mountShell(options: ShellOptions): ShellHandle {
     height: 22,
     verticalAlign: 'middle',
     text: '',
-    style: { fontSize: 12, fontWeight: '600', fillStyle: theme.colors.textSecondary },
+    style: { fontSize: 12, fontWeight: '600', fillStyle: token('ui.colors.textSecondary') },
   });
   header.addChildren([hamburger, pageTitle, domainLabel]);
   ice.addChild(header);
@@ -806,7 +807,15 @@ export function estimateTextHeight(text: string, width: number, fontSize: number
 }
 
 /** 正文段落（自动换行，宽给定、高按内容估） */
-export function paragraph(ctx: PageContext, rect: Omit<Rect, 'height'> & { text: string; fontSize?: number; color?: string }): any {
+export function paragraph(
+  ctx: PageContext,
+  rect: Omit<Rect, 'height'> & {
+    text: string;
+    fontSize?: number;
+    /** 允许**主题引用**（`token('ui.colors.text')`）—— 引用是 paint 时解析的，热切换才跟得上。 */
+    color?: string | ICEThemeTokenRef;
+  }
+): any {
   const fontSize = rect.fontSize || 12;
   const lineHeight = Math.round(fontSize * 1.6);
   const height = estimateTextHeight(rect.text, rect.width, fontSize, lineHeight);

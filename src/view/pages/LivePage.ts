@@ -27,6 +27,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type LivePageDeps = {
   onToggleRunning: () => void;
@@ -164,7 +165,7 @@ export class LivePage extends WaterPage {
             left: 104,
             top: 8,
             text: '采样速度',
-            style: { fontSize: 12, fillStyle: theme.colors.textSecondary },
+            style: { fontSize: 12, fillStyle: token('ui.colors.textSecondary') },
           }),
           false
         );

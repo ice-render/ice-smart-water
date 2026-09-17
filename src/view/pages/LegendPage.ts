@@ -32,6 +32,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type LegendPageDeps = {
   onFilterChange: (filter: LegendFilter) => void;
@@ -232,7 +233,7 @@ export class LegendPage extends WaterPage {
         top: y,
         width,
         text: entry.label,
-        style: { fontSize: 17, fontWeight: '700', fillStyle: theme.colors.text },
+        style: { fontSize: 17, fontWeight: '700', fillStyle: token('ui.colors.text') },
       }),
       false
     );
@@ -243,14 +244,14 @@ export class LegendPage extends WaterPage {
         top: y,
         width,
         text: `${entry.kind} · ${category.label} · 位号代号 ${entry.tag}`,
-        style: { fontSize: 11, fillStyle: theme.colors.textTertiary },
+        style: { fontSize: 11, fillStyle: token('ui.colors.textTertiary') },
       }),
       false
     );
     y += 22;
 
     this.detailBody.addChild(
-      paragraph(this.pageCtx, { left: 0, top: y, width, text: entry.role, color: theme.colors.text }),
+      paragraph(this.pageCtx, { left: 0, top: y, width, text: entry.role, color: token('ui.colors.text') }),
       false
     );
     y += Math.max(20, Math.ceil(entry.role.length / (width / 12)) * 19) + 10;

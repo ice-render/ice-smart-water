@@ -26,6 +26,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type DataSnapshot = {
   kpi: PlantKpi;
@@ -252,7 +253,7 @@ export class DataPage extends WaterPage {
           top: y,
           width,
           text: '✅ 未发现问题：六项指标达标，负荷与停留时间都在设计区间内',
-          color: theme.colors.success,
+          color: token('ui.colors.success'),
         }),
         false
       );

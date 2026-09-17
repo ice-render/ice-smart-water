@@ -1,19 +1,20 @@
 /**
- * 外观主题：**开页读一次、装一次；切换 = 记住选择 + 重新加载**。
+ * 外观主题：**开页装一次；切换是就地热换，不刷新页面**（2026-09-17 起）。
  *
- * ## 为什么不做"热切换"
+ * ## 热切换为什么现在能成立
  *
- * 组件库的主题是**构造期读一次**（见 `ice-web-components/docs/guides/theming.md`）：
- * `iceUIManager.setTheme()` 只影响**之后**新建的控件。而本工程界面几乎全是构造期取色的控件
- * —— 外壳（`shell.ts`）、12 个页面、卡片、表格、分段控件、菜单…… 热切换的结果是
- * **半新半旧**：换过的控件变深，没换的还是白的。那比"不支持切换"更糟（用户会以为界面坏了）。
+ * 以前组件是**构造期**把颜色抄成字面量的（`setTheme()` 只影响之后新建的控件），所以本工程退到过
+ * "存偏好 + `location.reload()`" —— 重新构造整棵树，代价是一次刷新。库 **1.15.0** 起两条腿都通了：
  *
- * 所以这里的做法是：**切换 = 写偏好 + `location.reload()`** —— 重新构造整棵树，
- * 每一层都拿到新主题。代价是一次刷新（本工程首屏本来就有一层遮罩，观感可接受）。
+ * 1. 组件样式里的颜色是**主题引用**（`token('ui.colors.x')`），引擎在 **paint 时**解析；
+ * 2. `iceUIManager.setTheme()` 会**广播到所有登记过的引擎实例**（`applyThemeToIce()` 时登记）。
  *
- * ⚠️ 引擎那一层其实**能**热换：`applyThemeToEngine(ice)` 会 `setTheme` + 置脏重绘，
- * 而 `ice-chart` 的 `theme: 'auto'` 还会订阅引擎主题变化自己重画。控件层不行 ——
- * 界面必须是整体一致的，所以两者不能各切各的。
+ * 于是换主题 = 改表 + 标脏 + 下一帧重画。**本仓自己的取色也必须是引用式**
+ * （5 处已迁：外壳品牌标题、登录门两处标题、图例强调、两个页面的时间线操作人）——
+ * 写死字面量的地方会停在旧主题上，那正是"半新半旧"的来源。
+ *
+ * ⚠️ 派生色（混色 / 压暗 / alpha）写不成一条引用，将来加进来要挂在
+ * `iceUIManager.onThemeChange()` 上重算（库的 `ICEWidget.onThemeChange()` 就是这件事）。
  *
  * ## 两级优先（与 `ice-agent-console` 同一口径）
  *
@@ -80,24 +81,29 @@ export function installTheme(): ThemeName {
   const stored = safeReadStorage();
   const name = resolveThemeName(search, stored);
 
-  iceUIManager.setTheme(name);
-  installed = name;
-  if (typeof document !== 'undefined') {
-    document.documentElement.dataset.theme = name;
-    /**
-     * DOM 那半：把同一张 token 表写成 CSS 变量（`--ice-color-*` 等）。
-     *
-     * 启动遮罩的 CSS 因此不用再手抄色值 —— 它写的是
-     * `var(--ice-color-background, #212529)`：JS 跑起来之前用括号里的兜底色（head 的内联脚本
-     * 已经按 `?theme=` / localStorage 打过 `data-theme`，所以暗色用户开页不闪白），
-     * JS 跑起来之后就换成 token 表里的真值。**一份表两处用**，改 token 时两半一起变。
-     */
-    applyThemeToCss(document.documentElement);
-  }
+  applyTheme(name);
   if (new URLSearchParams(search).get('theme') !== null) {
     safeWriteStorage(name);
   }
   return name;
+}
+
+/**
+ * 把一套主题装上（画布 + DOM 两半一起），**不重新加载**。
+ *
+ * - 画布那半：`iceUIManager.setTheme()` —— 库 **1.15.0 起会广播到所有登记过的引擎实例**，
+ *   而组件样式里的颜色是**主题引用**（`token('ui.colors.x')`，paint 时解析），所以下一帧就是新色，
+ *   **不必重建组件树**；
+ * - DOM 那半：`applyThemeToCss()` 把同一张 token 表写成 CSS 变量，并保留 `data-theme` 供
+ *   开页兜底（刷新时 head 的内联脚本据此先上底色，不闪白）。
+ */
+function applyTheme(name: ThemeName): void {
+  iceUIManager.setTheme(name);
+  installed = name;
+  if (typeof document !== 'undefined') {
+    document.documentElement.dataset.theme = name;
+    applyThemeToCss(document.documentElement);
+  }
 }
 
 /**
@@ -113,16 +119,22 @@ export function applyThemeToIce(ice: any): void {
 }
 
 /**
- * 切换主题：写偏好 + 重新加载（见文件头"为什么不做热切换"）。
+ * 切换主题：**就地换，不刷新**（2026-09-17 起，库 1.15.x 支持热切换之后）。
  *
- * 用 `reload()` 而不是自己拆树重建：本工程的装配是模块级脚本（`entries/app.ts`），
- * 没有 teardown 路径；为了切主题去加一套"拆干净再重建"的机制，风险和收益不成比例。
+ * 做三件事：装主题（画布 + DOM）→ 记住偏好 → 把 `?theme=` 同步进地址栏（`replaceState`，
+ * 不产生历史记录、也不触发导航，这样链接分享出去仍然是当前这套主题）。
+ *
+ * ⚠️ 前提是"界面里没有停在旧主题上的颜色"：
+ * - 组件库内部已迁移到引用式取色；
+ * - **本仓自己的取色也必须是引用式**（`token('ui.colors.x')`）—— 5 处已迁；
+ * - 派生色（混色 / 压暗 / 加透明度）如果将来加进来，要在 `iceUIManager.onThemeChange()` 里重算。
  */
 export function switchTheme(next: ThemeName): void {
   safeWriteStorage(next);
   const url = new URL(globalThis.location.href);
   url.searchParams.set('theme', next);
-  globalThis.location.replace(url.toString());
+  globalThis.history.replaceState(null, '', url.toString());
+  applyTheme(next);
 }
 
 /** localStorage 在隐私模式 / 沙箱里可能直接抛异常，读写成"尽力而为"。 */

@@ -38,6 +38,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type InspectionPageDeps = {
   /** 今日巡检任务（入口持有状态） */
@@ -252,7 +253,7 @@ export class InspectionPage extends WaterPage {
               width: wrap.state.width,
               text: `路线 ${task.routeName} · 班组 ${task.crew} · 计划 ${task.planAt}${task.by ? ` · 巡检人 ${task.by}` : ''}`,
               fontSize: 12,
-              color: theme.colors.text,
+              color: token('ui.colors.text'),
             }),
             false
           );

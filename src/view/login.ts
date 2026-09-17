@@ -11,7 +11,7 @@
  * 输入控件是 `ICETextField` / `ICEPasswordField`（画布控件）——它们在**聚焦时会挂一个原生
  * input 替身**接键盘输入，所以输入法、选中、退格这些都是浏览器原生行为，不是自己实现的。
  */
-import { ICE } from 'ice-render';
+import { ICE, token } from 'ice-render';
 import {
   ICEAlert,
   ICEButton,
@@ -113,7 +113,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
       fill: true,
       stroke: false,
       // 底色取主题（原来是写死的 #f8fafc：暗色下会留一块白光板）
-      style: { fillStyle: theme.colors.background },
+      style: { fillStyle: token('ui.colors.background') },
     })
   );
 
@@ -129,7 +129,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
       left,
       top,
       text: '❄',
-      style: { fontSize: 34, fillStyle: theme.colors.link },
+      style: { fontSize: 34, fillStyle: token('ui.colors.link') },
     })
   );
   ice.addChild(
@@ -137,7 +137,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
       left: left + 52,
       top: top + 6,
       text: brand.name,
-      style: { fontSize: 30, fontWeight: '700', fillStyle: theme.colors.link },
+      style: { fontSize: 30, fontWeight: '700', fillStyle: token('ui.colors.link') },
     })
   );
   ice.addChild(
@@ -145,7 +145,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
       left: left + 54,
       top: top + 48,
       text: brand.subtitle,
-      style: { fontSize: 16, fillStyle: theme.colors.textSecondary },
+      style: { fontSize: 16, fillStyle: token('ui.colors.textSecondary') },
     })
   );
   ice.addChild(
@@ -184,7 +184,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
         'ICE 家族综合示例：ice-render（画布引擎）· ice-entity-designer（给排水工艺域设计器）· ' +
         'ice-web-components（画布原生控件）· ice-chart（交互式图表）',
       fontSize: 12,
-      color: theme.colors.textTertiary,
+      color: token('ui.colors.textTertiary'),
     })
   );
 
@@ -268,7 +268,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
     top: 332,
     width: innerWidth,
     text: '',
-    style: { fontSize: 12, fillStyle: theme.colors.error },
+    style: { fontSize: 12, fillStyle: token('ui.colors.error') },
   });
   body.addChild(errorLabel, false);
 

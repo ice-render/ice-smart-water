@@ -43,6 +43,7 @@ import {
   type StatusTagSpec,
 } from '../shell';
 import { WaterPage } from '../WaterPage';
+import { token } from 'ice-render';
 
 export type ProcessSnapshot = {
   kpi: PlantKpi;
@@ -234,7 +235,7 @@ export class ProcessPage extends WaterPage {
       top: 182,
       width: rightWidth - CARD_INSET * 2,
       text: '',
-      style: { fontSize: 11, fillStyle: theme.colors.textSecondary },
+      style: { fontSize: 11, fillStyle: token('ui.colors.textSecondary') },
     });
     const oxygenHeading = sectionHeading(ctx, CARD_INSET, 208, '需氧量占设计值');
     this.oxygenBar = new ICEProgressBar({ left: CARD_INSET, top: 228, width: rightWidth - CARD_INSET * 2, height: 10, value: 0, max: 45000 });
@@ -243,7 +244,7 @@ export class ProcessPage extends WaterPage {
       top: 244,
       width: rightWidth - CARD_INSET * 2,
       text: '',
-      style: { fontSize: 11, fillStyle: theme.colors.textSecondary },
+      style: { fontSize: 11, fillStyle: token('ui.colors.textSecondary') },
     });
     [utilHeading, this.utilBar, this.utilText, oxygenHeading, this.oxygenBar, this.oxygenText].forEach((node) =>
       consoleBody.addChild(node, false)
@@ -348,7 +349,7 @@ export class ProcessPage extends WaterPage {
     const modeTitle = new ICELabel({
       width,
       text: `当前工况：${snapshot.mode.label}`,
-      style: { fontSize: 12, fontWeight: '600', fillStyle: theme.colors.text },
+      style: { fontSize: 12, fontWeight: '600', fillStyle: token('ui.colors.text') },
     });
     const noteNodes = snapshot.mode.notes.map((note) => bullet(ctx, { width, text: note, fontSize: 11 } as any));
     const auditHeading = sectionHeading(ctx, 0, 0, '运行审计');
@@ -369,7 +370,7 @@ export class ProcessPage extends WaterPage {
             color: issue.level === 'error' ? theme.colors.error : theme.colors.warning,
           } as any)
         )
-      : [paragraph(ctx, { width, text: '✅ 全厂指标在设计与标准区间内', color: theme.colors.success } as any)];
+      : [paragraph(ctx, { width, text: '✅ 全厂指标在设计与标准区间内', color: token('ui.colors.success') } as any)];
 
     // 按可用高度贪心截取；至少留一条审计，塞不进的用"还有 N 条"收口
     const remaining = bodyHeight - headUsed;
@@ -393,7 +394,7 @@ export class ProcessPage extends WaterPage {
     const footer = new ICELabel({
       width,
       text: `停运单元 ${snapshot.idleCount} 个 · 走线 ${snapshot.trace.path.length} 个单元`,
-      style: { fontSize: 11, fillStyle: theme.colors.textTertiary },
+      style: { fontSize: 11, fillStyle: token('ui.colors.textTertiary') },
     });
     contextBody.addChild(footer, false);
     footer.setState({ left: CARD_INSET, top: footerTop });
@@ -444,7 +445,7 @@ export class ProcessPage extends WaterPage {
       top: y + 1,
       width: width - 72,
       text: `${info.name}（${info.tag}）`,
-      style: { fontSize: 13, fontWeight: '600', fillStyle: theme.colors.text },
+      style: { fontSize: 13, fontWeight: '600', fillStyle: token('ui.colors.text') },
     });
     contextBody.addChild(nameLabel, false);
     y += 28;
@@ -474,7 +475,7 @@ export class ProcessPage extends WaterPage {
           top: y,
           width: 72,
           text: m.label,
-          style: { fontSize: 11, fillStyle: theme.colors.textSecondary },
+          style: { fontSize: 11, fillStyle: token('ui.colors.textSecondary') },
         });
         const bar = new ICEProgressBar({
           left: left + 76,
@@ -490,7 +491,7 @@ export class ProcessPage extends WaterPage {
           top: y,
           width: 72,
           text: m.value,
-          style: { fontSize: 10, fillStyle: theme.colors.textTertiary },
+          style: { fontSize: 10, fillStyle: token('ui.colors.textTertiary') },
         });
         contextBody.addChild(label, false);
         contextBody.addChild(bar, false);
@@ -532,7 +533,7 @@ export class ProcessPage extends WaterPage {
         y += (Number(node.state.height) || 18) + 3;
       });
     } else {
-      const ok = paragraph(ctx, { left, top: y, width, text: '✅ 无关联运行问题', fontSize: 10, color: theme.colors.success } as any);
+      const ok = paragraph(ctx, { left, top: y, width, text: '✅ 无关联运行问题', fontSize: 10, color: token('ui.colors.success') } as any);
       contextBody.addChild(ok, false);
       y += (Number(ok.state.height) || 16) + 3;
     }
