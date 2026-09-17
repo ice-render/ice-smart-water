@@ -181,6 +181,16 @@ async function main() {
   await page.waitForTimeout(900);
   await shot(page, '13-drill.png');
 
+  // 14) 精确曝气（鼓风机投运与频率 + 溶解氧仪表 + 设定滑块）
+  await gotoPage(page, 'aeration');
+  await page.waitForTimeout(1200);
+  await shot(page, '14-aeration.png');
+
+  // 15) 加药优化（三种药剂优化 vs 基线对比柱图 + 安全系数滑块）
+  await gotoPage(page, 'dosing');
+  await page.waitForTimeout(1200);
+  await shot(page, '15-dosing.png');
+
   /**
    * 深色主题：只拍四张关键的（登录门 / 工艺图 / 运行数据 / 符号库）。
    *
@@ -200,6 +210,8 @@ async function main() {
     ['process', '21-dark-process.png', 1200],
     ['data', '22-dark-data.png', 1500],
     ['legend', '23-dark-legend.png', 1200],
+    ['aeration', '24-dark-aeration.png', 1200],
+    ['dosing', '25-dark-dosing.png', 1200],
   ]) {
     await gotoPage(dark, key);
     await dark.waitForTimeout(wait);

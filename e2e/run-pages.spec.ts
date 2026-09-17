@@ -142,3 +142,80 @@ test('工况预案：四个预案可选、达标度可复现，切预案后结�
   expect((await canvasStats(page, '#canvas-drill-compare')).opaqueRatio).toBeGreaterThan(0);
   expect((page as any).__errors).toEqual([]);
 });
+
+test('精确曝气：投运台数在 [1,4]、节电率≥0、两岛有墨、零报错', async ({ page }) => {
+  await openPage(page, 'aeration');
+  const state = await page.evaluate(() => {
+    const w = (window as any).__water;
+    const plan = w.aeration.plan;
+    return {
+      page: w.shell.current(),
+      runningCount: plan.runningCount,
+      blowers: plan.blowers.length,
+      savingPct: plan.savingPct,
+      islands: ['aeration-bar', 'aeration-gauge'].map(
+        (id) => (document.getElementById(`island-${id}`) as HTMLElement).style.display !== 'none'
+      ),
+    };
+  });
+  expect(state.page).toBe('aeration');
+  expect(state.runningCount).toBeGreaterThanOrEqual(1);
+  expect(state.runningCount).toBeLessThanOrEqual(state.blowers);
+  expect(state.savingPct).toBeGreaterThanOrEqual(0);
+  expect(state.islands).toEqual([true, true]);
+
+  // 设定值可调：改到 3.5 后 plan 仍在约束内、零报错
+  await page.evaluate(() => (window as any).__water.aeration.setTargetDo(3.5));
+  const after = await page.evaluate(() => ({
+    targetDo: (window as any).__water.aeration.targetDo,
+    runningCount: (window as any).__water.aeration.plan.runningCount,
+  }));
+  expect(after.targetDo).toBe(3.5);
+  expect(after.runningCount).toBeGreaterThanOrEqual(1);
+
+  expect((await canvasStats(page, '#canvas-aeration-bar')).opaqueRatio).toBeGreaterThan(0);
+  expect((await canvasStats(page, '#canvas-aeration-gauge')).opaqueRatio).toBeGreaterThan(0);
+  expect((page as any).__errors).toEqual([]);
+});
+
+test('加药优化：三种药剂投加≥0、节药率∈[0,1]、优化≤基线、柱图有墨、零报错', async ({ page }) => {
+  await openPage(page, 'dosing');
+  const state = await page.evaluate(() => {
+    const w = (window as any).__water;
+    const plan = w.dosing.plan;
+    return {
+      page: w.shell.current(),
+      chemicals: plan.chemicals.map((c: any) => ({ opt: c.optimizedMass, base: c.baselineMass, saving: c.savingPct })),
+      savingPct: plan.savingPct,
+      islandVisible: (document.getElementById('island-dosing-bar') as HTMLElement).style.display !== 'none',
+    };
+  });
+  expect(state.page).toBe('dosing');
+  for (const chemical of state.chemicals) {
+    expect(chemical.opt).toBeGreaterThanOrEqual(0);
+    expect(chemical.base).toBeGreaterThanOrEqual(0);
+    expect(chemical.opt).toBeLessThanOrEqual(chemical.base + 1e-6);
+    expect(chemical.saving).toBeGreaterThanOrEqual(0);
+    expect(chemical.saving).toBeLessThanOrEqual(1);
+  }
+  expect(state.savingPct).toBeGreaterThanOrEqual(0);
+  expect(state.savingPct).toBeLessThanOrEqual(1);
+  expect(state.islandVisible).toBe(true);
+
+  // 投加安全系数可调且单调：调高后优化总投加增大、节药率不增
+  const before = await page.evaluate(() => {
+    const p = (window as any).__water.dosing.plan;
+    return { opt: p.totalOptimizedMass, saving: p.savingPct, sf: (window as any).__water.dosing.safetyFactor };
+  });
+  await page.evaluate(() => (window as any).__water.dosing.setSafetyFactor(1.5));
+  const after = await page.evaluate(() => {
+    const p = (window as any).__water.dosing.plan;
+    return { opt: p.totalOptimizedMass, saving: p.savingPct, sf: (window as any).__water.dosing.safetyFactor };
+  });
+  expect(after.sf).toBe(1.5);
+  expect(after.opt).toBeGreaterThan(before.opt);
+  expect(after.saving).toBeLessThanOrEqual(before.saving + 1e-6);
+
+  expect((await canvasStats(page, '#canvas-dosing-bar')).opaqueRatio).toBeGreaterThan(0);
+  expect((page as any).__errors).toEqual([]);
+});

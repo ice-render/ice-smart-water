@@ -20,6 +20,8 @@ export * from './alarm-log';
 export * from './sludge-manifest';
 export * from './asset-registry';
 export * from './inspection';
+export * from './aeration';
 export * from './energy-meter';
 export * from './pump-station';
 export * from './drill-plan';
+export * from './dosing';

@@ -21,6 +21,9 @@ import type { DayPoint } from '../domain/process-model';
 import { DISCHARGE_LIMIT_1A } from '../domain/water-quality';
 import type { CategoryMeta } from '../domain/symbol-catalog';
 import type { SludgeStage } from '../domain/sludge-manifest';
+import type { AerationPlan } from '../domain/aeration';
+import { BLOWER_FLEET, type BlowerState } from '../domain/aeration';
+import type { DosingPlan } from '../domain/dosing';
 import { HEALTH_DIMS } from '../domain/asset-registry';
 import { applyThemeToIce } from './theme';
 
@@ -444,6 +447,71 @@ export function inspectionRouteOption(stats: {
       { id: 'planned', type: 'bar', name: '计划', data: stats.planned, barWidth: 0.4 },
       { id: 'done', type: 'bar', name: '已巡', data: stats.done, barWidth: 0.4 },
       { id: 'missed', type: 'bar', name: '超时', data: stats.missed, barWidth: 0.4 },
+    ],
+  } as ChartOption;
+}
+
+/**
+ * 鼓风机投运与频率：横轴四台风机、纵轴运行频率（% 额定）。
+ *
+ * 停用风机（当前气量不需要）频率记为 0 —— 一眼看出"开几台、各跑多频"，
+ * 这正是对比朴素"全频直吹"基线、体现精确曝气省电的那张图。
+ */
+export function aerationBarOption(plan: AerationPlan): ChartOption {
+  const freq = (blower: BlowerState) => (blower.running ? blower.loadPct : 0);
+  return {
+    title: {
+      text: '鼓风机投运与频率',
+      subtext: `${plan.runningCount}/${BLOWER_FLEET.count} 台投运 · 较全频直吹基线节电 ${Math.round(plan.savingPct * 100)}%`,
+    },
+    theme: 'auto',
+    legend: { show: false },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '风机', data: plan.blowers.map((blower) => blower.id) },
+    yAxis: { name: '运行频率 %', min: 0, max: 100 },
+    animation: { enabled: true, duration: 440, easing: 'easeOutCubic' },
+    series: [
+      {
+        id: 'freq',
+        type: 'bar',
+        name: '运行频率',
+        data: plan.blowers.map(freq),
+        barWidth: 0.45,
+      },
+    ],
+  } as ChartOption;
+}
+
+/** 加药对比柱图：三种药剂的「优化投加」与「基线投加」（kg/d）分组并排，直接看出节药空间。 */
+export function dosingBarOption(plan: DosingPlan): ChartOption {
+  return {
+    title: {
+      text: '药剂投加：优化 vs 基线',
+      subtext: `整体节药率 ${Math.round(plan.savingPct * 100)}% · 安全系数 ${plan.safetyFactor.toFixed(2)}`,
+    },
+    theme: 'auto',
+    legend: { show: true },
+    tooltip: { trigger: 'axis' },
+    grid: { show: true, x: false, y: true },
+    xAxis: { type: 'category', name: '药剂', data: plan.chemicals.map((chemical) => chemical.name) },
+    yAxis: { name: '投加量 kg/d', min: 0 },
+    animation: { enabled: true, duration: 440, easing: 'easeOutCubic' },
+    series: [
+      {
+        id: 'optimized',
+        type: 'bar',
+        name: '优化投加',
+        data: plan.chemicals.map((chemical) => chemical.optimizedMass),
+        barWidth: 0.3,
+      },
+      {
+        id: 'baseline',
+        type: 'bar',
+        name: '基线投加',
+        data: plan.chemicals.map((chemical) => chemical.baselineMass),
+        barWidth: 0.3,
+      },
     ],
   } as ChartOption;
 }

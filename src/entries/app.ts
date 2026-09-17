@@ -53,6 +53,7 @@ import {
   type ShellLayout,
 } from '../view/shell';
 import { mountIsland, placeIslands, type IslandHandle } from '../view/islands';
+import { aerationControlState, evaluateAeration, evaluateDosing, type AerationPlan, type DosingPlan } from '../domain';
 import { installViewport } from '../view/canvas-viewport';
 import { clearLoginUser, readLoginUser, saveLoginUser } from '../view/login';
 import { login, setEnterApp } from './login-boot';
@@ -67,6 +68,8 @@ import {
   sludgeFlowOption,
   sumpLevelOption,
   tariffOption,
+  aerationBarOption,
+  dosingBarOption,
 } from '../view/board';
 import {
   AERATION_ZONES,
@@ -130,6 +133,8 @@ import { InspectionPage } from '../view/pages/InspectionPage';
 import { EnergyPage } from '../view/pages/EnergyPage';
 import { PumpPage } from '../view/pages/PumpPage';
 import { DrillPage } from '../view/pages/DrillPage';
+import { AerationPage } from '../view/pages/AerationPage';
+import { DosingPage } from '../view/pages/DosingPage';
 import { graphOfDesigner } from '../view/adapter';
 import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
 import { hideBootOverlayWhenPainted } from '../view/boot-overlay';
@@ -162,6 +167,9 @@ const islands: Record<string, IslandHandle> = {
   'pump-curve': mountIsland('pump-curve', need<HTMLCanvasElement>('canvas-pump-curve')),
   'sump-level': mountIsland('sump-level', need<HTMLCanvasElement>('canvas-sump-level')),
   'drill-compare': mountIsland('drill-compare', need<HTMLCanvasElement>('canvas-drill-compare')),
+  'aeration-bar': mountIsland('aeration-bar', need<HTMLCanvasElement>('canvas-aeration-bar')),
+  'aeration-gauge': mountIsland('aeration-gauge', need<HTMLCanvasElement>('canvas-aeration-gauge')),
+  'dosing-bar': mountIsland('dosing-bar', need<HTMLCanvasElement>('canvas-dosing-bar')),
 };
 // 先把所有岛摆到位再建引擎：引擎初始化要读画布尺寸，摆之前是 0×0
 islands.process.place(ProcessPage.processIslandRect(layout));
@@ -179,6 +187,9 @@ islands['energy-tariff'].place(EnergyPage.tariffIslandRect(layout));
 islands['pump-curve'].place(PumpPage.pumpCurveIslandRect(layout));
 islands['sump-level'].place(PumpPage.sumpLevelIslandRect(layout));
 islands['drill-compare'].place(DrillPage.drillCompareIslandRect(layout));
+islands['aeration-bar'].place(AerationPage.barIslandRect(layout));
+islands['aeration-gauge'].place(AerationPage.gaugeIslandRect(layout));
+islands['dosing-bar'].place(DosingPage.barIslandRect(layout));
 
 /* ================= 岛 1：工艺图（设计器） ================= */
 
@@ -210,6 +221,18 @@ let issues: AuditIssue[] = [];
 let trace: FlowTrace = { connected: false, path: [], pipePath: [] };
 let dayPoints: DayPoint[] = [];
 let hydraulics: UnitHydraulics[] = [];
+/** 溶解氧设定值 mg/L（页面滑块可调，默认值 2.0 是 AAO 好氧池常用控制点） */
+let aerationTargetDo = 2.0;
+/** 当前鼓风调度方案（随图纸 / 工况重算；滑块只改设定值） */
+let aerationPlan: AerationPlan = evaluateAeration(kpi, aerationTargetDo);
+/** 最新实测溶解氧 mg/L（由实时采样循环喂入，对标 liveReadings 的 'do'） */
+let latestDo = 2.0;
+let aerationPage: AerationPage | null = null;
+/** 投加安全系数（页面滑块可调，默认值 1.1：常规操作余量） */
+let dosingSafety = 1.1;
+/** 当前加药优化方案（随图纸 / 工况重算；滑块只改安全系数） */
+let dosingPlan: DosingPlan = evaluateDosing(kpi, meta, dosingSafety);
+let dosingPage: DosingPage | null = null;
 
 /* ================= 岛 2：24 小时看板（ice-chart） ================= */
 
@@ -366,6 +389,35 @@ const drillCompare = mountChart(islands['drill-compare'].canvas, () =>
   drillCompareOption(drillCompareData(currentDrill())) as any
 );
 
+/** 溶解氧仪表：指针弹簧跟随，子文本展示设定值（设定值由页面滑块改） */
+const aerationGauge = mountChart(islands['aeration-gauge'].canvas, () => ({
+  title: { text: '溶解氧', subtext: `设定 ${aerationTargetDo.toFixed(1)} mg/L` },
+  theme: 'auto',
+  tooltip: { trigger: 'item' },
+  gauge: {
+    min: 0,
+    max: 5,
+    splitNumber: 5,
+    lineWidth: 14,
+    axisLineColor: [
+      [0.2, '#dc3545'],
+      [0.3, '#ffc107'],
+      [0.75, '#198754'],
+      [1, '#0d6efd'],
+    ],
+    pointer: { show: true, width: 6, length: 0.72 },
+    detail: { formatter: (value: number) => `${value.toFixed(2)}`, fontSize: 26 },
+    title: { show: false },
+  },
+  series: [{ id: 'g', type: 'gauge', name: '溶解氧', data: [{ name: '溶解氧', value: latestDo }] }],
+}) as any);
+
+/** 鼓风机投运与频率：四台风机运行频率（%） */
+const aerationBar = mountChart(islands['aeration-bar'].canvas, () => aerationBarOption(aerationPlan) as any);
+
+/** 加药对比：三种药剂的优化投加 vs 基线投加（kg/d） */
+const dosingBar = mountChart(islands['dosing-bar'].canvas, () => dosingBarOption(dosingPlan) as any);
+
 function snapshot() {
   return {
     kpi,
@@ -406,6 +458,10 @@ function liveTick(): void {
     pushTrend('do', [liveSamples, Number(oxygen.value.toFixed(2))]);
     pushTrend('nh3n', [liveSamples, Number(ammonia.value.toFixed(2))]);
     liveGauge.setData('g', [{ name: '溶解氧', value: Number(oxygen.value.toFixed(2)) }]);
+    // 把实测 DO 喂给精确曝气页（仪表 + 过/欠曝判定），对标 livePage.applyReadings
+    latestDo = Number(oxygen.value.toFixed(2));
+    if (aerationPage) aerationPage.applyDo();
+    if (islands['aeration-gauge'].visible()) aerationGauge.setData('g', [{ name: '溶解氧', value: latestDo }]);
   }
   // 热力图每两拍左移一列（与图表的 180ms 更新动画配合，不闪）
   if (liveSamples % 2 === 0) {
@@ -519,6 +575,23 @@ function applyScenario(next: ScenarioParams): void {
   shell.refresh();
 }
 
+/** 溶解氧设定值改了：重算鼓风调度 + 刷新图表与页面（kpi 没变，不走整轮 recompute） */
+function setAerationTargetDo(value: number): void {
+  aerationTargetDo = Math.round(value * 10) / 10;
+  aerationPlan = evaluateAeration(kpi, aerationTargetDo);
+  if (islands['aeration-gauge'].visible()) aerationGauge.refresh();
+  if (islands['aeration-bar'].visible()) aerationBar.refresh();
+  shell.refresh();
+}
+
+/** 投加安全系数改了：重算加药方案 + 刷新图表与页面（kpi 没变，不走整轮 recompute） */
+function setDosingSafety(value: number): void {
+  dosingSafety = Math.max(1, Math.round(value * 100) / 100);
+  dosingPlan = evaluateDosing(kpi, meta, dosingSafety);
+  if (islands['dosing-bar'].visible()) dosingBar.refresh();
+  shell.refresh();
+}
+
 /* ================= 事件中心：报警状态 ================= */
 
 let alarms: AlarmEvent[] = [];
@@ -629,6 +702,11 @@ function recompute(): void {
   if (islands['pump-curve'].visible()) pumpCurveChart.refresh();
   if (islands['sump-level'].visible()) sumpLevelChart.refresh();
   if (islands['drill-compare'].visible()) drillCompare.refresh();
+  aerationPlan = evaluateAeration(kpi, aerationTargetDo);
+  if (islands['aeration-bar'].visible()) aerationBar.refresh();
+  if (islands['aeration-gauge'].visible()) aerationGauge.refresh();
+  dosingPlan = evaluateDosing(kpi, meta, dosingSafety);
+  if (islands['dosing-bar'].visible()) dosingBar.refresh();
   refreshAlarms();
   shell.refresh();
   graphIce.requestRepaint();
@@ -821,6 +899,8 @@ const NAV_DOMAINS: ShellDomain[] = [
       { key: 'live', label: '实时监视' },
       { key: 'pump', label: '泵站监视' },
       { key: 'energy', label: '能耗分项' },
+      { key: 'aeration', label: '精确曝气' },
+      { key: 'dosing', label: '加药优化' },
     ],
   },
   {
@@ -1146,6 +1226,32 @@ const shell = mountShell({
         return drillPage;
       },
     },
+    {
+      key: 'aeration',
+      label: '精确曝气',
+      build: (ctx: PageContext) => {
+        aerationPage = new AerationPage(ctx, {
+          targetDo: () => aerationTargetDo,
+          onTargetDoChange: setAerationTargetDo,
+          plan: () => aerationPlan,
+          currentDo: () => latestDo,
+          control: () => aerationControlState(aerationTargetDo, latestDo),
+        });
+        return aerationPage;
+      },
+    },
+    {
+      key: 'dosing',
+      label: '加药优化',
+      build: (ctx: PageContext) => {
+        dosingPage = new DosingPage(ctx, {
+          safetyFactor: () => dosingSafety,
+          onSafetyFactorChange: setDosingSafety,
+          plan: () => dosingPlan,
+        });
+        return dosingPage;
+      },
+    },
   ],
   onIslands: (specs: IslandSpec[]) => {
     placeIslands(islands, specs);
@@ -1221,6 +1327,22 @@ const shell = mountShell({
       requestAnimationFrame(() => {
         drillCompare.resize();
         drillCompare.refresh();
+      });
+    }
+    // 精确曝气：两个岛同理（风机频率柱图 + 溶解氧仪表）
+    if (specs.some((spec) => spec.id === 'aeration-bar')) {
+      requestAnimationFrame(() => {
+        aerationBar.resize();
+        aerationBar.refresh();
+        aerationGauge.resize();
+        aerationGauge.refresh();
+      });
+    }
+    // 加药优化：对比柱图同理
+    if (specs.some((spec) => spec.id === 'dosing-bar')) {
+      requestAnimationFrame(() => {
+        dosingBar.resize();
+        dosingBar.refresh();
       });
     }
   },
@@ -1519,6 +1641,45 @@ if (login.visible()) {
     select: (id: string) => {
       drillPlanId = id;
       if (drillPage) drillPage.onUpdate();
+    },
+  },
+  // 精确曝气与鼓风优化
+  aeration: {
+    get targetDo() {
+      return aerationTargetDo;
+    },
+    setTargetDo: (value: number) => setAerationTargetDo(value),
+    get plan() {
+      return aerationPlan;
+    },
+    get currentDo() {
+      return latestDo;
+    },
+    control: () => aerationControlState(aerationTargetDo, latestDo),
+    get runningCount() {
+      return aerationPlan.runningCount;
+    },
+    get savingPct() {
+      return aerationPlan.savingPct;
+    },
+  },
+  // 加药优化
+  dosing: {
+    get safetyFactor() {
+      return dosingSafety;
+    },
+    setSafetyFactor: (value: number) => setDosingSafety(value),
+    get plan() {
+      return dosingPlan;
+    },
+    get savingPct() {
+      return dosingPlan.savingPct;
+    },
+    get totalOptimizedCost() {
+      return dosingPlan.totalOptimizedCost;
+    },
+    get totalBaselineCost() {
+      return dosingPlan.totalBaselineCost;
     },
   },
   // 统一选择总线（端到端测试 / 调试入口）
