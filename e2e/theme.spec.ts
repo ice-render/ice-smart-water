@@ -46,6 +46,42 @@ async function canvasInk(page: Page, selector: string): Promise<Ink> {
   }, selector);
 }
 
+/**
+ * 数画布上**精确等于某个色值**的像素（可只看右侧内容区）。
+ *
+ * 用途：查"浅色主题的颜色还留在画布上吗"。
+ * - 用**精确相等**而不是近似：深色主题里有几档颜色与浅色的只差 ~10（`textDisabled #6c757d`
+ *   vs 浅色 `textSecondary #6a7178`），给容差就会把"画对了的"算成"漏水"；
+ * - `minX` 用来**排除左侧侧栏**：热切换要点菜单，选中那一行本来就会变。
+ */
+async function countColor(page: Page, selector: string, hex: string, minX = 0): Promise<number> {
+  return page.evaluate(
+    ({ sel, target, from }) => {
+      const canvas = document.querySelector(sel) as HTMLCanvasElement | null;
+      if (!canvas) throw new Error(`找不到画布 ${sel}`);
+      const { data } = (canvas.getContext('2d') as CanvasRenderingContext2D).getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+      const n = parseInt(target.slice(1), 16);
+      const r = (n >> 16) & 255;
+      const g = (n >> 8) & 255;
+      const b = n & 255;
+      let count = 0;
+      const width = canvas.width;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        if (((i / 4) % width) < from) continue;
+        if (data[i] === r && data[i + 1] === g && data[i + 2] === b) count += 1;
+      }
+      return count;
+    },
+    { sel: selector, target: hex, from: minX }
+  );
+}
+
 /** DOM 那半与引擎那半的读数（两层都要看，缺一层就是"半新半旧"）。 */
 async function themeFacts(page: Page) {
   return page.evaluate(() => {
@@ -214,6 +250,20 @@ test.describe('外观主题：真实业务系统里的可用性', () => {
     expect(await page.evaluate(() => (window as any).__noReloadMark), '不该发生页面重载').toBe('keep-me');
     expect(await page.evaluate(() => localStorage.getItem('ice-smart-water:theme'))).toBe('dark');
     expect((await canvasInk(page, '#canvas-shell')).luma).toBeLessThan(100);
+
+    /**
+     * ★ **文字也必须真的换色**（2026-09-17 补）：这条以前没有，于是漏掉了一个真实缺陷 ——
+     * 热切换后大量文本仍贴着**烤进离屏位图的浅色主题字色**（引擎的组件级缓存/静态层不随主题失效），
+     * 而"偏好落盘 / 地址栏 / ✓ 挪位 / 整幅亮度"全都是对的，谁也看不出来。
+     *
+     * 判据：数**浅色主题专属**的次级文字色 `#6a7178` 还剩多少像素（只看右侧内容区，
+     * 排除左侧侧栏 —— 热切换点了菜单，选中行本来就会变）。
+     * 精确相等而不是近似：深色 `textDisabled #6c757d` 与 `#6a7178` 只差 10。
+     * 阈值 50 是实测口径：**修复后 ≤5**（抗锯齿边缘），**未修复时 715**（用引擎 2.14.0 的产物
+     * 实测；线上真机对拍同一现象是内容区 2.8 万像素差异）。
+     */
+    const lightTextLeft = await countColor(page, '#canvas-shell', '#6a7178', 260);
+    expect(lightTextLeft, `浅色主题的次级文字色还剩 ${lightTextLeft} 个像素（内容区）`).toBeLessThanOrEqual(50);
 
     // ✓ 挪到「深色」上（菜单不重建，靠 setItemLabel 改文案）
     await expandThemeMenu(page, menu);
