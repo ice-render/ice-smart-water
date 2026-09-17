@@ -127,6 +127,10 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
 所以"谁来触发更新"的答案是**宿主**：数据什么时候变新鲜只有宿主知道；`onShow()` 留给不需要
 预重算的宿主（库里已有，见 ice-web-components `docs/guides/layout.md` 第六节）。
 
+> **契约正文不在本仓**：应用页面怎么写（一页一类、`onUpdate()` 由谁在什么时候调、稳定结构的
+> 边界、入口决策表、验收清单、常见坑）单一来源是
+> `ice-web-components/docs/guides/app-pages.md`。本仓的「页面写法」只记**本仓特有**的部分。
+
 ## 新增业务模块的口径（改之前先看）
 
 - **`live-signal.ts`**：实时点位用**确定性随机游走**（同种子同序列）—— 现场数据是活的，
