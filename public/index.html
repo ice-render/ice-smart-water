@@ -4,6 +4,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ice-smart-water · 智慧水务运行控制台</title>
+    <%
+      /*
+       * 构建期就把「控制台 chunk」的带哈希文件名写进 HTML，让浏览器**解析 HTML 时**就开始并行下载它。
+       *
+       * 实测依据（2026-09-17，Slow 4G + 4x CPU、冷缓存、记住登录态的复访路径）：
+       * 只靠 `boot.ts` 里那句动态 import，浏览器必须等 boot.js **执行完**才发请求 ——
+       * boot.js 下载 341→1532ms、控制台 chunk 1664ms 才发出、外壳首帧 3792ms，两段下载完全串行。
+       * 加这条 preload 后两段并行，外壳首帧提前约 1s。
+       * 用 preload 而不是 prefetch：这条 chunk 在启动时就无条件 import，一定会用到；
+       * 运行期的 `webpackPrefetch` 注释做不到这点（它也是等 boot.js 执行时才注入 link）。
+       */
+      const consoleChunk = (compilation.chunks || []).find((c) => c.name === 'console');
+      const consoleFile = consoleChunk && (consoleChunk.files || []).find((f) => f.endsWith('.js'));
+    %>
+    <% if (consoleFile) { %><link rel="preload" as="script" href="<%= consoleFile %>" /><% } %>
     <!-- 内联水滴图标：省一次 /favicon.ico 的 404（那会在控制台留一条 error，e2e 的"零报错"就废了） -->
     <link
       rel="icon"

@@ -124,8 +124,39 @@ test('运行指标：水量平衡 / 污泥平衡 / 能耗都落在工程常规�
   expect((page as any).__errors).toEqual([]);
 });
 
+test('按需加载：图表库不进首屏 —— 默认页不建图，切到图表页才建', async ({ page }) => {
+  // ① 首屏是「工艺流程图」，一个图表都不用：图表实例**没有被创建**（图表库是动态 import 的）
+  expect(await page.evaluate(() => (window as any).__water.charts.boardReady())).toBe(false);
+
+  // ② 控制台 chunk 的体积预算（**按原始字节**，与是否 gzip 无关）：图表库（281KB）拆成了独立 chunk。
+  //    拆开前 ≈612KB、拆开后 ≈352KB —— 预算 450KB 能在"图表库又被塞回控制台 chunk"时报红，
+  //    同时给正常增长留余量。GitHub Pages 会 gzip（线上实测 104KB），只会更小。
+  const chunks = await page.evaluate(() =>
+    (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+      .filter((r) => /\.js$/.test(r.name))
+      .map((r) => ({ name: r.name.split('/').pop() as string, kb: Math.round(((r.encodedBodySize || 0) / 1024) * 10) / 10 }))
+  );
+  const consoleChunk = chunks.filter((c) => /^console\./.test(c.name))[0];
+  expect(consoleChunk, '应该能观测到控制台 chunk').toBeTruthy();
+  expect(consoleChunk.kb, `控制台 chunk 不该含图表库（当前 ${consoleChunk.kb}KB）`).toBeLessThan(450);
+  // 图表库必须是**独立 chunk**：登录后空闲预取会把它取回来（等它出现，最多 10s）
+  await page.waitForFunction(() => performance.getEntriesByType('resource').some((r) => /chart\.[a-f0-9]+\.js$/.test(r.name)), null, {
+    timeout: 10000,
+  });
+
+  // ③ 切到图表页 → 图表这时才被创建，并且真的画出来了
+  await openPage(page, 'data');
+  await page.waitForFunction(() => (window as any).__water.charts.boardReady(), null, { timeout: 15000 });
+  const ink = await canvasStats(page, '#canvas-board');
+  expect(ink.inkRatio).toBeGreaterThan(0.02);
+  expect((page as any).__errors).toEqual([]);
+});
+
 test('侧栏菜单（画布控件）：点「运行数据」切页，看板岛出现并画出 24 点曲线', async ({ page }) => {
   await openPage(page, 'data');
+  // 图表库是**按需加载**的（281KB，首屏「工艺流程图」用不到）：切到图表页之后要等它就绪，
+  // 不能假设 `board.chart` 同步存在 —— 慢网下建图要等一次动态 import。
+  await page.waitForFunction(() => !!(window as any).__water?.charts?.boardReady(), null, { timeout: 15000 });
   const state = await page.evaluate(() => {
     const water = (window as any).__water;
     const chart = water.board.chart;
