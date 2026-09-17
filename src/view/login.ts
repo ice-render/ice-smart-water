@@ -129,7 +129,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
       left,
       top,
       text: '❄',
-      style: { fontSize: 34, fillStyle: theme.colors.primary },
+      style: { fontSize: 34, fillStyle: theme.colors.link },
     })
   );
   ice.addChild(
@@ -137,7 +137,7 @@ export function mountLogin(options: LoginOptions): LoginHandle {
       left: left + 52,
       top: top + 6,
       text: brand.name,
-      style: { fontSize: 30, fontWeight: '700', fillStyle: theme.colors.primary },
+      style: { fontSize: 30, fontWeight: '700', fillStyle: theme.colors.link },
     })
   );
   ice.addChild(

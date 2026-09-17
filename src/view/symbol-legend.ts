@@ -230,7 +230,7 @@ export class SymbolLegend {
         stroke: false,
         interactive: false,
         linkable: false,
-        style: { fontSize: 14, fillStyle: this.theme.colors.primary, textAlign: 'left', textBaseline: 'middle' },
+        style: { fontSize: 14, fillStyle: this.theme.colors.link, textAlign: 'left', textBaseline: 'middle' },
       })
     );
     this.ice.addChild(

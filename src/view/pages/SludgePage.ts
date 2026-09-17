@@ -253,7 +253,7 @@ export class SludgePage extends WaterPage {
               items: item.actions.map((action) => ({
                 title: action.text,
                 time: `${action.at} · ${action.by}`,
-                color: action.by === '系统' ? theme.colors.textTertiary : theme.colors.primary,
+                color: action.by === '系统' ? theme.colors.textTertiary : theme.colors.link,
               })),
             }),
             false

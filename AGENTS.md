@@ -162,6 +162,17 @@ Google 的 TypeScript 指南对顺序**完全沉默**（全文 "ordering" 出现
    **它自己那个实例**的主题背景亮度。建完图不 `applyThemeToIce(chart.ice)` 的话，`auto` 会解析成
    浅色 —— 症状是"外壳深了、图表还是白底黑字"，而且**不报错**。
 
+3. **"primary 当文字"在暗底上不达标**（2026-09-17 补）：`primary #0d6efd` 是**填充色**，
+   当文字压在暗色 `surface` 上实测只有 **2.96:1**。深色工艺页截图里数出过 **49866 个 `#0d6efd`
+   像素**，逐个都是"把 primary 当文字用"的地方（KPI 数值、品牌标题、指标卡图标、趋势文字）。
+   现在按库的 §1.1 表分工：**文字/图标用 `link`**（暗 `#6ea8fe` = 5.51:1）、**浅底小方块上的
+   字形用 `*TextEmphasis`**（`#cfe2ff` 对 `primaryBg` = 13.7:1）、**填充/描边仍用 `primary`**。
+   改完复测：`#0d6efd` 只剩 14202 像素（全是填充），`link` 984 像素全是文字。
+
+   配套的库侧改动是 `ice-web-components` 1.14.0/1.14.1（新增 `link` token + `tests/theme-contrast.test.ts`
+   对比度体检 + `ICEStatCard` / `ICEStatistic` 那三处同类修正）—— 所以本仓的 `ice-web-components`
+   依赖**至少 `^1.14.1`**。
+
 ### 验收（`e2e/theme.spec.ts`，6 条真机用例）
 
 - 浅色基线（外壳 luma > 200、纯白 > 40%）与暗色（luma < 100、**纯白 < 2%**）对照；
