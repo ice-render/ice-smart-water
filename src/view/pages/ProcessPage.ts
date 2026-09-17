@@ -58,11 +58,13 @@ export type ProcessPageDeps = {
   onAction: (key: 'valve' | 'trace' | 'validate' | 'fit' | 'reset' | 'export-svg' | 'export-json' | 'reload') => void;
 };
 
-const STAT_HEIGHT = 120;
-const CONSOLE_HEIGHT = 248;
 
 /** 工艺流程图页：五张统计卡 + 工艺图（岛）+ 运行控制台 + 运行要点 / 单元检视。 */
 export class ProcessPage extends WaterPage {
+  private static readonly STAT_HEIGHT = 120;
+
+  private static readonly CONSOLE_HEIGHT = 248;
+
   /** 介质代号 → 中文（符号目录里是英文枚举，界面上给运行人员看中文） */
   private static readonly MEDIUM_LABELS: Record<string, string> = {
     sewage: '污水',
@@ -95,9 +97,9 @@ export class ProcessPage extends WaterPage {
     const y0 = layout.content.top + PAGE_PADDING;
     return {
       left: x0,
-      top: y0 + STAT_HEIGHT + PAGE_GAP,
+      top: y0 + ProcessPage.STAT_HEIGHT + PAGE_GAP,
       width: layout.inner.width - PAGE_GAP - layout.rightWidth,
-      height: layout.inner.height - STAT_HEIGHT - PAGE_GAP,
+      height: layout.inner.height - ProcessPage.STAT_HEIGHT - PAGE_GAP,
     };
   }
 
@@ -131,12 +133,12 @@ export class ProcessPage extends WaterPage {
     const y0 = layout.content.top + PAGE_PADDING;
     const rightWidth = layout.rightWidth;
     const leftWidth = layout.inner.width - PAGE_GAP - rightWidth;
-    const mainTop = y0 + STAT_HEIGHT + PAGE_GAP;
-    const mainHeight = layout.inner.height - STAT_HEIGHT - PAGE_GAP;
+    const mainTop = y0 + ProcessPage.STAT_HEIGHT + PAGE_GAP;
+    const mainHeight = layout.inner.height - ProcessPage.STAT_HEIGHT - PAGE_GAP;
 
     /* ---------------- 第一行：五张统计卡 ---------------- */
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 5, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: ProcessPage.STAT_HEIGHT, count: 5, gap: PAGE_GAP });
     this.addChild(statRow, false);
     this.stats = [
       { icon: '〜', title: '进水流量', trendType: 'info' },
@@ -147,7 +149,7 @@ export class ProcessPage extends WaterPage {
     ].map(
       (cfg) =>
         new ICEStatCard({
-          height: STAT_HEIGHT,
+          height: ProcessPage.STAT_HEIGHT,
           value: '—',
           trend: '',
           ...cfg,
@@ -198,8 +200,8 @@ export class ProcessPage extends WaterPage {
     this.addChild(graphCard, false);
 
     /* ---------------- 右栏：运行控制台 + 上下文卡（默认运行要点，选中单元时切单元检视） ---------------- */
-    const contextHeight = mainHeight - CONSOLE_HEIGHT - PAGE_GAP;
-    const consoleRect: Rect = { left: x0 + leftWidth + PAGE_GAP, top: mainTop, width: rightWidth, height: CONSOLE_HEIGHT };
+    const contextHeight = mainHeight - ProcessPage.CONSOLE_HEIGHT - PAGE_GAP;
+    const consoleRect: Rect = { left: x0 + leftWidth + PAGE_GAP, top: mainTop, width: rightWidth, height: ProcessPage.CONSOLE_HEIGHT };
     const consoleCard = createCard({ id: 'console-card', rect: consoleRect, title: '运行控制台' });
     const consoleBody = new ICEWidget({ left: 0, top: 0, width: consoleRect.width, height: consoleRect.height, fill: false, stroke: false, interactive: false });
     consoleCard.addChild(consoleBody, false);
@@ -241,7 +243,7 @@ export class ProcessPage extends WaterPage {
       consoleBody.addChild(node, false)
     );
 
-    this.contextRect = { left: x0 + leftWidth + PAGE_GAP, top: mainTop + CONSOLE_HEIGHT + PAGE_GAP, width: rightWidth, height: contextHeight };
+    this.contextRect = { left: x0 + leftWidth + PAGE_GAP, top: mainTop + ProcessPage.CONSOLE_HEIGHT + PAGE_GAP, width: rightWidth, height: contextHeight };
     // 注意：id 保持 `notes-card` 不变 —— e2e 的版面体检护栏按这个 id 找卡片、审计正文溢出。
     // 这张卡现在"默认运行要点、选中单元时切单元检视"，但体检只看"正文子节点不溢出卡片"，
     // 两种内容都按同一套贪心 / 紧凑布局，不会溢出。

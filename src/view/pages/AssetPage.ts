@@ -41,19 +41,21 @@ export type AssetPageDeps = {
   operator: () => string;
 };
 
-const STAT_HEIGHT = 96;
-const HEALTH_WIDTH_RATIO = 0.38;
 
 /** 设备资产页：六个统计 + 健康度热力图（岛）+ 台账表。 */
 export class AssetPage extends WaterPage {
+  private static readonly STAT_HEIGHT = 96;
+
+  private static readonly HEALTH_WIDTH_RATIO = 0.38;
+
   private static healthCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
     return {
       left: x0,
-      top: y0 + STAT_HEIGHT + PAGE_GAP,
-      width: Math.round(layout.inner.width * HEALTH_WIDTH_RATIO),
-      height: layout.inner.height - STAT_HEIGHT - PAGE_GAP,
+      top: y0 + AssetPage.STAT_HEIGHT + PAGE_GAP,
+      width: Math.round(layout.inner.width * AssetPage.HEALTH_WIDTH_RATIO),
+      height: layout.inner.height - AssetPage.STAT_HEIGHT - PAGE_GAP,
     };
   }
 
@@ -85,7 +87,7 @@ export class AssetPage extends WaterPage {
 
     /* ---------------- 第一行：六个统计 ---------------- */
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 6, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: AssetPage.STAT_HEIGHT, count: 6, gap: PAGE_GAP });
     this.addChild(statRow, false);
     const statConfigs = [
       { title: '台账设备', icon: '▦', trend: '与图上单元一一对应', type: 'primary' as const },
@@ -97,7 +99,7 @@ export class AssetPage extends WaterPage {
     ];
     this.statCards = statConfigs.map((config) => {
       const card = new ICEStatCard({
-        height: STAT_HEIGHT,
+        height: AssetPage.STAT_HEIGHT,
         icon: config.icon,
         title: config.title,
         value: '0',

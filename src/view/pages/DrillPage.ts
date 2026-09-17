@@ -37,27 +37,30 @@ export type DrillPageDeps = {
   plans: Array<{ id: string; name: string }>;
 };
 
-const STAT_HEIGHT = 96;
-const ROW2_RATIO = 0.5;
 
 /** 说明文案**必须短**：单元格文字节点按文字宽度排版，写长了会溢出列（expectTableFits 会抓） */
-const NOTE_BY_ID: Record<string, string> = {
-  removal: '上界由回流比决定',
-  srt: '硝化菌养得住的前提',
-  fm: '过高二沉池易跑泥',
-  energy: '运行成本的直接口径',
-  passed: '一级 A 六项达标数',
-};
 
 /** 工况预案页：四个统计 + 预演步骤 + 达标度对比（岛）+ 偏差明细表。 */
 export class DrillPage extends WaterPage {
+  private static readonly STAT_HEIGHT = 96;
+
+  private static readonly ROW2_RATIO = 0.5;
+
+  private static readonly NOTE_BY_ID: Record<string, string> = {
+    removal: '上界由回流比决定',
+    srt: '硝化菌养得住的前提',
+    fm: '过高二沉池易跑泥',
+    energy: '运行成本的直接口径',
+    passed: '一级 A 六项达标数',
+  };
+
   private static compareCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
-    const row2Top = y0 + STAT_HEIGHT + PAGE_GAP;
-    const rest = layout.inner.height - STAT_HEIGHT - PAGE_GAP * 2;
+    const row2Top = y0 + DrillPage.STAT_HEIGHT + PAGE_GAP;
+    const rest = layout.inner.height - DrillPage.STAT_HEIGHT - PAGE_GAP * 2;
     const width = Math.round(layout.inner.width * 0.58);
-    return { left: x0 + (layout.inner.width - width), top: row2Top, width, height: Math.round(rest * ROW2_RATIO) };
+    return { left: x0 + (layout.inner.width - width), top: row2Top, width, height: Math.round(rest * DrillPage.ROW2_RATIO) };
   }
 
   public static drillCompareIslandRect(layout: ShellLayout): Rect {
@@ -80,7 +83,7 @@ export class DrillPage extends WaterPage {
       left: layout.content.left + PAGE_PADDING,
       top: compare.top + compare.height + PAGE_GAP,
       width: layout.inner.width,
-      height: layout.inner.height - STAT_HEIGHT - compare.height - PAGE_GAP * 2,
+      height: layout.inner.height - DrillPage.STAT_HEIGHT - compare.height - PAGE_GAP * 2,
     };
   }
 
@@ -98,7 +101,7 @@ export class DrillPage extends WaterPage {
 
     /* ---------------- 第一行：四个统计 ---------------- */
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 4, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: DrillPage.STAT_HEIGHT, count: 4, gap: PAGE_GAP });
     this.addChild(statRow, false);
     const statConfigs = [
       { title: '预案达标', icon: '✔', trend: '按验收口径', type: 'success' as const },
@@ -108,7 +111,7 @@ export class DrillPage extends WaterPage {
     ];
     this.statCards = statConfigs.map((config) => {
       const card = new ICEStatCard({
-        height: STAT_HEIGHT,
+        height: DrillPage.STAT_HEIGHT,
         icon: config.icon,
         title: config.title,
         value: '0',
@@ -297,7 +300,7 @@ export class DrillPage extends WaterPage {
       );
     }
 
-    this.table.setData(drillRows(run).map((row) => ({ ...row, note: NOTE_BY_ID[row.id] || '' })));
+    this.table.setData(drillRows(run).map((row) => ({ ...row, note: DrillPage.NOTE_BY_ID[row.id] || '' })));
     this.pageCtx.ice.dirty = true;
   }
 }

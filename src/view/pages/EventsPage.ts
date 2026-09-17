@@ -60,22 +60,25 @@ export type EventsPageDeps = {
   canLocate?: (unitId: string) => boolean;
 };
 
-const STAT_HEIGHT = 96;
 
-const LEVEL_STATUS: Record<AlarmLevel, string> = { critical: 'error', major: 'warning', minor: 'info' };
-const STATE_STATUS: Record<AlarmStatus, string> = { open: 'error', acked: 'warning', closed: 'success' };
 
 /** 事件中心页：四个统计 + 报警清单表（筛选 / 多选 / 行展开 / 行内处置 / 跨视图定位）。 */
 export class EventsPage extends WaterPage {
+  private static readonly STAT_HEIGHT = 96;
+
+  private static readonly LEVEL_STATUS: Record<AlarmLevel, string> = { critical: 'error', major: 'warning', minor: 'info' };
+
+  private static readonly STATE_STATUS: Record<AlarmStatus, string> = { open: 'error', acked: 'warning', closed: 'success' };
+
   /** 「报警清单」卡片：占满内容区剩下的高度 */
   private static tableCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
     return {
       left: x0,
-      top: y0 + STAT_HEIGHT + PAGE_GAP,
+      top: y0 + EventsPage.STAT_HEIGHT + PAGE_GAP,
       width: layout.inner.width,
-      height: layout.inner.height - STAT_HEIGHT - PAGE_GAP,
+      height: layout.inner.height - EventsPage.STAT_HEIGHT - PAGE_GAP,
     };
   }
 
@@ -94,7 +97,7 @@ export class EventsPage extends WaterPage {
 
     /* ---------------- 第一行：四个统计 ---------------- */
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 4, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: EventsPage.STAT_HEIGHT, count: 4, gap: PAGE_GAP });
     this.addChild(statRow, false);
     const statConfigs = [
       { title: '未处理', icon: '⚑', trend: '待派单 / 处置', type: 'error' as const },
@@ -104,7 +107,7 @@ export class EventsPage extends WaterPage {
     ];
     this.statCards = statConfigs.map((config) => {
       const card = new ICEStatCard({
-        height: STAT_HEIGHT,
+        height: EventsPage.STAT_HEIGHT,
         icon: config.icon,
         title: config.title,
         value: '0',
@@ -149,7 +152,7 @@ export class EventsPage extends WaterPage {
               width: 64,
               height: 22,
               text: String(value),
-              status: event ? LEVEL_STATUS[event.level] : 'info',
+              status: event ? EventsPage.LEVEL_STATUS[event.level] : 'info',
               variant: 'soft',
             });
           },
@@ -173,7 +176,7 @@ export class EventsPage extends WaterPage {
               width: 64,
               height: 22,
               text: String(value),
-              status: event ? STATE_STATUS[event.status] : 'info',
+              status: event ? EventsPage.STATE_STATUS[event.status] : 'info',
               variant: 'soft',
             });
           },

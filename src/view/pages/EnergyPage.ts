@@ -29,18 +29,20 @@ export type EnergyPageDeps = {
   nodes: () => MeterNode[];
 };
 
-const STAT_HEIGHT = 96;
-const ISLAND_ROW_RATIO = 0.52;
 
 /** 能耗分项页：五个统计 + 两张图（岛）+ 分项明细表。 */
 export class EnergyPage extends WaterPage {
+  private static readonly STAT_HEIGHT = 96;
+
+  private static readonly ISLAND_ROW_RATIO = 0.52;
+
   private static energyMixCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
-    const row2Top = y0 + STAT_HEIGHT + PAGE_GAP;
-    const rest = layout.inner.height - STAT_HEIGHT - PAGE_GAP * 2;
+    const row2Top = y0 + EnergyPage.STAT_HEIGHT + PAGE_GAP;
+    const rest = layout.inner.height - EnergyPage.STAT_HEIGHT - PAGE_GAP * 2;
     const width = Math.round((layout.inner.width - PAGE_GAP) / 2);
-    return { left: x0, top: row2Top, width, height: Math.round(rest * ISLAND_ROW_RATIO) };
+    return { left: x0, top: row2Top, width, height: Math.round(rest * EnergyPage.ISLAND_ROW_RATIO) };
   }
 
   public static energyMixIslandRect(layout: ShellLayout): Rect {
@@ -62,7 +64,7 @@ export class EnergyPage extends WaterPage {
       left: mix.left,
       top: mix.top + mix.height + PAGE_GAP,
       width: layout.inner.width,
-      height: layout.inner.height - STAT_HEIGHT - mix.height - PAGE_GAP * 2,
+      height: layout.inner.height - EnergyPage.STAT_HEIGHT - mix.height - PAGE_GAP * 2,
     };
   }
 
@@ -79,7 +81,7 @@ export class EnergyPage extends WaterPage {
 
     /* ---------------- 第一行：五个统计 ---------------- */
     // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 5, gap: PAGE_GAP });
+    const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: EnergyPage.STAT_HEIGHT, count: 5, gap: PAGE_GAP });
     this.addChild(statRow, false);
     const statConfigs = [
       { title: '日耗电', icon: '⚡', trend: '全厂 kWh/d', type: 'primary' as const },
@@ -90,7 +92,7 @@ export class EnergyPage extends WaterPage {
     ];
     this.statCards = statConfigs.map((config) => {
       const card = new ICEStatCard({
-        height: STAT_HEIGHT,
+        height: EnergyPage.STAT_HEIGHT,
         icon: config.icon,
         title: config.title,
         value: '0',

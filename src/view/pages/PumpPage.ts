@@ -40,18 +40,20 @@ export type PumpPageDeps = {
   overrides: () => Record<string, boolean>;
 };
 
-const STAT_HEIGHT = 96;
-const ISLAND_ROW_RATIO = 0.54;
 
 /** 泵站监视页：四个统计 + 两张图（岛）+ 泵组清单表。 */
 export class PumpPage extends WaterPage {
+  private static readonly STAT_HEIGHT = 96;
+
+  private static readonly ISLAND_ROW_RATIO = 0.54;
+
   private static pumpCurveCardRect(layout: ShellLayout): Rect {
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
-    const row2Top = y0 + STAT_HEIGHT + PAGE_GAP;
-    const rest = layout.inner.height - STAT_HEIGHT - PAGE_GAP * 2;
+    const row2Top = y0 + PumpPage.STAT_HEIGHT + PAGE_GAP;
+    const rest = layout.inner.height - PumpPage.STAT_HEIGHT - PAGE_GAP * 2;
     const width = Math.round((layout.inner.width - PAGE_GAP) / 2);
-    return { left: x0, top: row2Top, width, height: Math.round(rest * ISLAND_ROW_RATIO) };
+    return { left: x0, top: row2Top, width, height: Math.round(rest * PumpPage.ISLAND_ROW_RATIO) };
   }
 
   public static pumpCurveIslandRect(layout: ShellLayout): Rect {
@@ -73,7 +75,7 @@ export class PumpPage extends WaterPage {
       left: curve.left,
       top: curve.top + curve.height + PAGE_GAP,
       width: layout.inner.width,
-      height: layout.inner.height - STAT_HEIGHT - curve.height - PAGE_GAP * 2,
+      height: layout.inner.height - PumpPage.STAT_HEIGHT - curve.height - PAGE_GAP * 2,
     };
   }
 
@@ -90,7 +92,7 @@ export class PumpPage extends WaterPage {
 
   /* ---------------- 第一行：四个统计 ---------------- */
   // 统计卡一行：等宽 + 等间距交给引擎的等分网格（老写法是 index*(statWidth+gap) 手算）
-  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: STAT_HEIGHT, count: 4, gap: PAGE_GAP });
+  const statRow = createStatRow({ left: x0, top: y0, width: layout.inner.width, height: PumpPage.STAT_HEIGHT, count: 4, gap: PAGE_GAP });
     this.addChild(statRow, false);
   const statConfigs = [
     { title: '运行 / 备用', icon: '◎', trend: '泵组状态', type: 'primary' as const },
@@ -100,7 +102,7 @@ export class PumpPage extends WaterPage {
   ];
   this.statCards = statConfigs.map((config, index) => {
     const card = new ICEStatCard({
-      height: STAT_HEIGHT,
+      height: PumpPage.STAT_HEIGHT,
       icon: config.icon,
       title: config.title,
       value: '0',

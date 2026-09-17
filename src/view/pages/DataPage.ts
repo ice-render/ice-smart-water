@@ -39,9 +39,6 @@ export type DataPageDeps = {
   snapshot: () => DataSnapshot;
 };
 
-const TREND_HEIGHT = 372;
-const LOAD_TABLE_WIDTH = 596;
-const COMPLIANCE_WIDTH = 372;
 
 /**
  * 运行数据页：一张看板岛 + 三张卡（沿程负荷表 / 达标对照 / 运行审计）。
@@ -51,6 +48,12 @@ const COMPLIANCE_WIDTH = 372;
  * 但必须先 `removeChildren` 清空（库里记着的坑：不清空会新旧文字叠在一起）。
  */
 export class DataPage extends WaterPage {
+  private static readonly TREND_HEIGHT = 372;
+
+  private static readonly LOAD_TABLE_WIDTH = 596;
+
+  private static readonly COMPLIANCE_WIDTH = 372;
+
   /**
    * 「24 小时运行看板」卡片的矩形。
    *
@@ -62,7 +65,7 @@ export class DataPage extends WaterPage {
       left: layout.content.left + PAGE_PADDING,
       top: layout.content.top + PAGE_PADDING,
       width: layout.inner.width,
-      height: TREND_HEIGHT,
+      height: DataPage.TREND_HEIGHT,
     };
   }
 
@@ -83,7 +86,7 @@ export class DataPage extends WaterPage {
     const { layout } = ctx;
     const x0 = layout.content.left + PAGE_PADDING;
     const y0 = layout.content.top + PAGE_PADDING;
-    const auditWidth = layout.inner.width - LOAD_TABLE_WIDTH - COMPLIANCE_WIDTH - PAGE_GAP * 2;
+    const auditWidth = layout.inner.width - DataPage.LOAD_TABLE_WIDTH - DataPage.COMPLIANCE_WIDTH - PAGE_GAP * 2;
 
     /* ---------------- 24 小时运行看板（岛） ---------------- */
     const trendRect: Rect = DataPage.boardCardRect(layout);
@@ -95,16 +98,16 @@ export class DataPage extends WaterPage {
     this.addChild(trendCard, false);
 
     /* ---------------- 底部三块 ---------------- */
-    const bottomTop = y0 + TREND_HEIGHT + PAGE_GAP;
-    const bottomHeight = layout.inner.height - TREND_HEIGHT - PAGE_GAP;
+    const bottomTop = y0 + DataPage.TREND_HEIGHT + PAGE_GAP;
+    const bottomHeight = layout.inner.height - DataPage.TREND_HEIGHT - PAGE_GAP;
 
-    const loadRect: Rect = { left: x0, top: bottomTop, width: LOAD_TABLE_WIDTH, height: bottomHeight };
+    const loadRect: Rect = { left: x0, top: bottomTop, width: DataPage.LOAD_TABLE_WIDTH, height: bottomHeight };
     const loadCard = createCard({ id: 'load-card', rect: loadRect, title: '沿程水量与负荷' });
     this.loadTable = new ICETable({
       id: 'load-table',
       left: 0,
       top: 0,
-      width: LOAD_TABLE_WIDTH - CARD_INSET * 2,
+      width: DataPage.LOAD_TABLE_WIDTH - CARD_INSET * 2,
       rowHeight: 28,
       columns: [
         { key: 'unit', title: '单元' },
@@ -116,12 +119,12 @@ export class DataPage extends WaterPage {
       data: [],
       pagination: { pageSize: 6, showTotal: true },
     });
-    placeInCard(loadCard, this.loadTable);
+    DataPage.placeInCard(loadCard, this.loadTable);
 
     const complianceRect: Rect = {
-      left: x0 + LOAD_TABLE_WIDTH + PAGE_GAP,
+      left: x0 + DataPage.LOAD_TABLE_WIDTH + PAGE_GAP,
       top: bottomTop,
-      width: COMPLIANCE_WIDTH,
+      width: DataPage.COMPLIANCE_WIDTH,
       height: bottomHeight,
     };
     const complianceCard = createCard({ id: 'compliance-card', rect: complianceRect, title: '出水达标对照' });
@@ -129,7 +132,7 @@ export class DataPage extends WaterPage {
       id: 'compliance-table',
       left: 0,
       top: 0,
-      width: COMPLIANCE_WIDTH - CARD_INSET * 2,
+      width: DataPage.COMPLIANCE_WIDTH - CARD_INSET * 2,
       rowHeight: 28,
       columns: [
         { key: 'item', title: '指标' },
@@ -139,10 +142,10 @@ export class DataPage extends WaterPage {
       ],
       data: [],
     });
-    placeInCard(complianceCard, this.complianceTable);
+    DataPage.placeInCard(complianceCard, this.complianceTable);
 
     this.auditRect = {
-      left: x0 + LOAD_TABLE_WIDTH + COMPLIANCE_WIDTH + PAGE_GAP * 2,
+      left: x0 + DataPage.LOAD_TABLE_WIDTH + DataPage.COMPLIANCE_WIDTH + PAGE_GAP * 2,
       top: bottomTop,
       width: auditWidth,
       height: bottomHeight,
@@ -162,6 +165,17 @@ export class DataPage extends WaterPage {
     this.addChild(this.auditBody, false);
     this.addChild(loadCard, false);
     this.addChild(complianceCard, false);
+  }
+
+  /**
+   * 把控件放进卡片的正文区。
+   *
+   * 坐标基准是**卡片内相对坐标** —— 卡片自己已经在 rect 上了，这里再加一次 `rect.left`
+   * 会让控件整体跑出卡片（症状是"控件在画布外、点不到"）。
+   */
+  private static placeInCard(card: any, child: any): void {
+    child.setState({ left: CARD_INSET, top: 46 });
+    card.addChild(child, false);
   }
 
   /** 本页的岛：24 小时看板挖在 `trend-card` 的正文区。 */
@@ -264,15 +278,4 @@ export class DataPage extends WaterPage {
       );
     }
   }
-}
-
-/**
- * 把控件放进卡片的正文区。
- *
- * 坐标基准是**卡片内相对坐标** —— 卡片自己已经在 rect 上了，这里再加一次 `rect.left`
- * 会让控件整体跑出卡片（症状是"控件在画布外、点不到"）。
- */
-function placeInCard(card: any, child: any): void {
-  child.setState({ left: CARD_INSET, top: 46 });
-  card.addChild(child, false);
 }
