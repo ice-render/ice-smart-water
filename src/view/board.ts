@@ -6,8 +6,17 @@
  * 跨图联动、缩放平移、图例开关、键盘导航都是库的内建能力。
  *
  * 图表都建在**自己的画布**上，容器尺寸变了由 `autoResize` 重排（ResizeObserver）。
+ *
+ * **图表库按需加载**（2026-09-17）：`ice-chart` 有 281KB（压缩前），而首屏是「工艺流程图」，
+ * 一个图表都不用 —— 实测（Slow 4G + 4x CPU、冷缓存）它占控制台 chunk 的三分之一：
+ * 387KB gz 里约 110KB、以及约 400ms 的解析/执行长任务。所以这里改成动态 import：
+ * 只有**图表所在的岛真的可见**（切到运行数据 / 实时监视 / 能耗 … 页）时才创建图表。
+ * 首屏不加载它；登录后空闲时会 `prefetch()` 预热，用户切过去通常已经就绪。
+ *
+ * 句柄把 `appendData / setData / setOption` 这些**增量**调用也包住了：图表还没创建时它们会被忽略，
+ * 数据由调用方（页面状态）在创建时一次性喂全 —— 图表层的滑动窗口不再兼任"唯一数据源"。
  */
-import { createChart, type ChartOption } from '@damoqiongqiu/ice-chart';
+import type { ChartOption } from '@damoqiongqiu/ice-chart';
 import type { DayPoint } from '../domain/process-model';
 import { DISCHARGE_LIMIT_1A } from '../domain/water-quality';
 import type { CategoryMeta } from '../domain/symbol-catalog';
@@ -15,32 +24,132 @@ import type { SludgeStage } from '../domain/sludge-manifest';
 import { HEALTH_DIMS } from '../domain/asset-registry';
 
 export type ChartHandle = {
-  chart: any;
+  /** 图表实例；**按需加载完成前是 `null`**（调试 / e2e 要先等就绪，见 `ready`）。 */
+  chart: any | null;
+  /** 图表是否已创建（库已加载且这张图已经建好）。 */
+  ready: boolean;
   /** 重新按当前数据算 option 并应用（保留当前缩放窗口） */
   refresh: () => void;
   resize: () => void;
+  /** 增量追加数据点（图表未就绪时空转；调用方的数据源才是唯一真相） */
+  appendData: (seriesId: string, points: Array<[number, number]>, options?: any) => void;
+  /** 整体替换某个系列的数据（同上） */
+  setData: (seriesId: string, data: any, options?: any) => void;
+  /** 直接应用一份 option（同上） */
+  setOption: (option: ChartOption, options?: any) => void;
+  /** 后台预热图表库（不建图）：登录后空闲时调用，用户切到图表页就不用等 */
+  prefetch: () => void;
+  /** UI 空闲时预热（内部用，幂等） */
+  prefetchWhenIdle: () => void;
   destroy: () => void;
 };
+
+/** 动态载入图表库（同一个 Promise 只加载一次）。 */
+let chartLibPromise: Promise<any> | null = null;
+function loadChartLib(): Promise<any> {
+  if (!chartLibPromise) {
+    chartLibPromise = import(/* webpackChunkName: "chart" */ '@damoqiongqiu/ice-chart');
+  }
+  return chartLibPromise;
+}
+
+/** 画布当前是否可见：岛被 `display:none` 藏起来时 `offsetParent` 为 null。 */
+function isCanvasVisible(canvas: HTMLCanvasElement): boolean {
+  return !!canvas && canvas.offsetParent !== null && canvas.width > 0;
+}
 
 /**
  * 挂一张图：`buildOption` 每次 refresh 时重新算 —— 数据在业务层，
  * 图表层只负责把最新数据编译成像素。
  */
 export function mountChart(canvas: HTMLCanvasElement, buildOption: () => ChartOption): ChartHandle {
-  const chart = createChart(canvas, buildOption(), { autoResize: true, renderMode: 'dirty-rect' });
-  // 立刻按容器实测尺寸对齐一次：`createChart` 只按画布当前尺寸布图，
-  // 而画布刚被塞进"岛"里时还是 300×150 的默认尺寸。容器不可见时 resize() 会自己跳过。
-  if (typeof chart.resize === 'function') chart.resize();
+  let chart: any = null;
+  let loading = false;
+
+  /**
+   * 创建图表（幂等）。只在**画布可见**时真正建：不可见时建出来尺寸也不对，
+   * 而且那样就失去了"首屏不加载图表库"的意义。
+   */
+  const ensure = (): void => {
+    if (chart || loading || !isCanvasVisible(canvas)) {
+      return;
+    }
+    loading = true;
+    void loadChartLib()
+      .then((mod: any) => {
+        if (chart || !isCanvasVisible(canvas)) {
+          return; // 期间被切走了：交给下一次 refresh 再建
+        }
+        chart = mod.createChart(canvas, buildOption(), { autoResize: true, renderMode: 'dirty-rect' });
+        // 立刻按容器实测尺寸对齐一次：`createChart` 只按画布当前尺寸布图，
+        // 而画布刚被塞进"岛"里时还是 300×150 的默认尺寸。容器不可见时 resize() 会自己跳过。
+        if (typeof chart.resize === 'function') {
+          chart.resize();
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[ice-smart-water] 图表库加载失败：', err);
+      })
+      .finally(() => {
+        loading = false;
+      });
+  };
+
   return {
-    chart,
+    get chart(): any | null {
+      return chart;
+    },
+    get ready(): boolean {
+      return !!chart;
+    },
     refresh(): void {
+      if (!chart) {
+        ensure();
+        return;
+      }
       chart.setOption(buildOption(), { animate: true, preserveView: true });
     },
     resize(): void {
-      if (typeof chart.resize === 'function') chart.resize();
+      if (!chart) {
+        ensure();
+        return;
+      }
+      if (typeof chart.resize === 'function') {
+        chart.resize();
+      }
+    },
+    appendData(seriesId: string, points: Array<[number, number]>, options?: any): void {
+      if (chart && typeof chart.appendData === 'function') {
+        chart.appendData(seriesId, points, options);
+      }
+    },
+    setData(seriesId: string, data: any, options?: any): void {
+      if (chart && typeof chart.setData === 'function') {
+        chart.setData(seriesId, data, options);
+      }
+    },
+    setOption(option: ChartOption, options?: any): void {
+      if (chart && typeof chart.setOption === 'function') {
+        chart.setOption(option, options);
+      }
+    },
+    prefetch(): void {
+      void loadChartLib().catch(() => undefined);
+    },
+    prefetchWhenIdle(): void {
+      // 只在登录后空闲时预热（首帧之前抢带宽反而拖慢首屏）
+      const idle = (globalThis as any).requestIdleCallback;
+      if (typeof idle === 'function') {
+        idle(() => void loadChartLib().catch(() => undefined), { timeout: 4000 });
+      } else {
+        setTimeout(() => void loadChartLib().catch(() => undefined), 1200);
+      }
     },
     destroy(): void {
-      if (typeof chart.destroy === 'function') chart.destroy();
+      if (chart && typeof chart.destroy === 'function') {
+        chart.destroy();
+      }
+      chart = null;
     },
   };
 }

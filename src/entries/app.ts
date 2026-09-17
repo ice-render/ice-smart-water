@@ -242,6 +242,20 @@ const LIVE_WINDOW = 120; // 趋势滑动窗口点数
 const HEAT_COLUMNS = 24; // 热力图时间片数
 
 /** 实时趋势：三条曲线（流量 / 溶解氧 / 出水氨氮），双 y 轴 */
+/**
+ * 实时趋势的**应用侧滑动窗口**：图表按需加载，建图之前窗口已经在长，
+ * 所以数据留在应用里（每个序列最多 LIVE_WINDOW 个点），建图时一次喂满、之后增量追加。
+ */
+const trendWindow: Record<'inflow' | 'do' | 'nh3n', Array<[number, number]>> = { inflow: [], do: [], nh3n: [] };
+function pushTrend(series: 'inflow' | 'do' | 'nh3n', point: [number, number]): void {
+  const win = trendWindow[series];
+  win.push(point);
+  if (win.length > LIVE_WINDOW) {
+    win.splice(0, win.length - LIVE_WINDOW);
+  }
+  liveTrend.appendData(series, [point], { maxPoints: LIVE_WINDOW });
+}
+
 const liveTrend = mountChart(islands['live-trend'].canvas, () => ({
   title: { text: '实时趋势', subtext: '滑动窗口 · 新点从右侧进入' },
   theme: 'light',
@@ -255,9 +269,11 @@ const liveTrend = mountChart(islands['live-trend'].canvas, () => ({
   ],
   animation: { enter: { duration: 300, easing: 'easeOutCubic' } },
   series: [
-    { id: 'inflow', type: 'area', name: '进水流量', data: [], color: '#0d6efd', areaOpacity: 0.16, lineWidth: 1.6, smooth: 0.25 },
-    { id: 'do', type: 'line', name: '溶解氧', yAxisIndex: 1, data: [], color: '#198754', lineWidth: 2, smooth: 0.25 },
-    { id: 'nh3n', type: 'line', name: '出水氨氮', yAxisIndex: 1, data: [], color: '#dc3545', lineWidth: 2, smooth: 0.25 },
+    // 数据来自**应用侧的滑动窗口**（`trendWindow`）：图表按需加载时窗口可能已经在长，
+    // 建图那一刻要从这里一次性喂满，而不是从空开始（否则切到实时页会看到"历史丢了"）。
+    { id: 'inflow', type: 'area', name: '进水流量', data: trendWindow.inflow, color: '#0d6efd', areaOpacity: 0.16, lineWidth: 1.6, smooth: 0.25 },
+    { id: 'do', type: 'line', name: '溶解氧', yAxisIndex: 1, data: trendWindow.do, color: '#198754', lineWidth: 2, smooth: 0.25 },
+    { id: 'nh3n', type: 'line', name: '出水氨氮', yAxisIndex: 1, data: trendWindow.nh3n, color: '#dc3545', lineWidth: 2, smooth: 0.25 },
   ],
 }) as any);
 
@@ -405,15 +421,15 @@ function liveTick(): void {
   const oxygen = byId('do');
   const ammonia = byId('nh3n');
   if (inflow && oxygen && ammonia) {
-    liveTrend.chart.appendData('inflow', [[liveSamples, Number(inflow.value.toFixed(1))]], { maxPoints: LIVE_WINDOW });
-    liveTrend.chart.appendData('do', [[liveSamples, Number(oxygen.value.toFixed(2))]], { maxPoints: LIVE_WINDOW });
-    liveTrend.chart.appendData('nh3n', [[liveSamples, Number(ammonia.value.toFixed(2))]], { maxPoints: LIVE_WINDOW });
-    liveGauge.chart.setData('g', [{ name: '溶解氧', value: Number(oxygen.value.toFixed(2)) }]);
+    pushTrend('inflow', [liveSamples, Number(inflow.value.toFixed(1))]);
+    pushTrend('do', [liveSamples, Number(oxygen.value.toFixed(2))]);
+    pushTrend('nh3n', [liveSamples, Number(ammonia.value.toFixed(2))]);
+    liveGauge.setData('g', [{ name: '溶解氧', value: Number(oxygen.value.toFixed(2)) }]);
   }
   // 热力图每两拍左移一列（与图表的 180ms 更新动画配合，不闪）
   if (liveSamples % 2 === 0) {
     heatMatrix = rollZoneMatrix(heatMatrix, signalRandom, AERATION_ZONES.length);
-    liveHeat.chart.setData('heat', zoneMatrixData(heatMatrix, AERATION_ZONES));
+    liveHeat.setData('heat', zoneMatrixData(heatMatrix, AERATION_ZONES));
   }
   const summary = summarizeReadings(liveReadings);
   if (livePage) livePage.update(liveReadings, summary);
@@ -518,7 +534,7 @@ function applyScenario(next: ScenarioParams): void {
   scenarioParams = next;
   scenarioResult = evaluateScenario(next);
   if (calcPage) calcPage.apply(scenarioResult);
-  calcCurve.chart.setOption(curveOption(), { animate: true, preserveView: true });
+  calcCurve.setOption(curveOption(), { animate: true, preserveView: true });
   shell.refresh();
 }
 
@@ -1255,6 +1271,9 @@ function enterApp(name: string): void {
   refreshAlarms();
   operatorName = name;
   recompute();
+  // 登录后**空闲时**预热图表库（281KB）：首屏（工艺流程图）不需要它，
+  // 但用户切到运行数据 / 实时监视 / 能耗这些页时就不该再等一次下载。抢首屏带宽反而更糟。
+  liveTrend.prefetchWhenIdle();
   shell.toast(`欢迎，${name}`);
 }
 
@@ -1340,15 +1359,23 @@ if (login.visible()) {
     tick: () => liveTick(),
     toggle: () => liveToggle(),
     setSpeed: (speed: number) => liveSetSpeed(speed),
-    trendPoints: () => liveTrend.chart.norm.series.map((series: any) => (series.points || []).length),
-    heatData: () => (liveHeat.chart.norm.series[0]?.points || []).length,
+    // 图表按需加载：没就绪时这些读数是空的，`charts.*Ready()` 用来等
+    trendPoints: () => (liveTrend.chart ? liveTrend.chart.norm.series.map((series: any) => (series.points || []).length) : []),
+    heatData: () => (liveHeat.chart ? (liveHeat.chart.norm.series[0]?.points || []).length : 0),
   },
   // 工艺试算
   calc: {
     params: () => scenarioParams,
     apply: (next: Partial<ScenarioParams>) => applyScenario({ ...scenarioParams, ...next }),
     result: () => scenarioResult,
-    curveSeries: () => calcCurve.chart.norm.series.map((series: any) => series.id),
+    curveSeries: () => (calcCurve.chart ? calcCurve.chart.norm.series.map((series: any) => series.id) : []),
+  },
+  /** 图表按需加载的就绪状态（e2e / 调试用） */
+  charts: {
+    boardReady: () => board.ready,
+    trendReady: () => liveTrend.ready,
+    heatReady: () => liveHeat.ready,
+    curveReady: () => calcCurve.ready,
   },
   // 事件中心
   alarms: {
