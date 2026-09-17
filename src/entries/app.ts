@@ -133,6 +133,7 @@ import { DrillPage } from '../view/pages/DrillPage';
 import { graphOfDesigner } from '../view/adapter';
 import { getSelectedUnit, inspectorProbe, onUnitSelect, selectUnit, setInspectorSource } from '../view/selection';
 import { hideBootOverlayWhenPainted } from '../view/boot-overlay';
+import { applyThemeToIce, switchTheme, themeName } from '../view/theme';
 
 function need<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -182,12 +183,16 @@ islands['drill-compare'].place(DrillPage.drillCompareIslandRect(layout));
 /* ================= 岛 1：工艺图（设计器） ================= */
 
 const graphIce = new ICE().init(islands.process.canvas, { renderMode: 'dirty-rect' });
+// 引擎侧主题（画布底色 + 选中框 / 手柄 / 对齐引导线 / 插槽）—— 设计器的外壳色是从引擎主题派生的，
+// 所以**必须在 `new WaterProcessDesigner` 之前**打好（反了派生出来的是引擎默认色）
+applyThemeToIce(graphIce);
 const designer = new WaterProcessDesigner(graphIce);
 const viewport = installViewport({ ice: graphIce, canvas: islands.process.canvas, designer, padding: 56 });
 
 /* ================= 岛 3：符号图例（同一个域设计器，另一张画布） ================= */
 
 const legendIce = new ICE().init(islands.legend.canvas, { renderMode: 'dirty-rect' });
+applyThemeToIce(legendIce);
 const legendDesigner = new WaterProcessDesigner(legendIce);
 const legendViewport = installViewport({ ice: legendIce, canvas: islands.legend.canvas, designer: legendDesigner, padding: 40 });
 const legend = new SymbolLegend({ ice: legendIce, designer: legendDesigner });
@@ -234,7 +239,7 @@ function pushTrend(series: 'inflow' | 'do' | 'nh3n', point: [number, number]): v
 
 const liveTrend = mountChart(islands['live-trend'].canvas, () => ({
   title: { text: '实时趋势', subtext: '滑动窗口 · 新点从右侧进入' },
-  theme: 'light',
+  theme: 'auto',
   legend: { show: true, position: 'top' },
   tooltip: { trigger: 'axis' },
   crosshair: { show: true, axis: 'x', showAxisLabel: true },
@@ -256,7 +261,7 @@ const liveTrend = mountChart(islands['live-trend'].canvas, () => ({
 /** 关键仪表：指针弹簧跟随 */
 const liveGauge = mountChart(islands['live-gauge'].canvas, () => ({
   title: { text: '好氧池溶解氧', subtext: '目标 2.0 mg/L' },
-  theme: 'light',
+  theme: 'auto',
   tooltip: { trigger: 'item' },
   gauge: {
     min: 0,
@@ -280,7 +285,7 @@ const liveGauge = mountChart(islands['live-gauge'].canvas, () => ({
 let heatMatrix = createZoneMatrix(HEAT_COLUMNS, AERATION_ZONES.length, 20260914);
 const liveHeat = mountChart(islands['live-heat'].canvas, () => ({
   title: { text: '生化池分区溶解氧', subtext: `最近 ${HEAT_COLUMNS} 个时间片` },
-  theme: 'light',
+  theme: 'auto',
   legend: { show: false },
   tooltip: { trigger: 'item' },
   xAxis: { type: 'category', data: Array.from({ length: HEAT_COLUMNS }, (_, index) => `T${index + 1}`) },
@@ -454,7 +459,7 @@ function curveOption(): any {
   const k = scenarioResult.temperatureFactor * scenarioResult.srtFactor;
   return {
     title: { text: '脱氮能力 vs 污泥回流比 R', subtext: `内回流比 r = ${internalRatio} · 修正系数 k = ${k.toFixed(2)}` },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     crosshair: { show: true, axis: 'x', showAxisLabel: true },
@@ -871,6 +876,26 @@ const shell = mountShell({
       label: '重载示范案例',
       iconPath: 'M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15',
     },
+    /**
+     * 界面主题：**切换 = 记住选择 + 重新加载**。
+     *
+     * 为什么不是就地换色：组件库的主题是**构造期读一次**（见 `view/theme.ts` 的长注释）——
+     * 外壳 / 12 个页面 / 卡片 / 表格全是构造期取色的控件，就地 setTheme 只会换掉"之后新建的"
+     * 那几个，界面会半新半旧。重新加载的代价是一次刷新，换来的是"每一层都拿到新主题"。
+     *
+     * 子项文案带 ✓ 是因为菜单只在开页建一次：切完刷新回来，✓ 自然落到新主题上 ——
+     * 用户不用猜"我现在是哪套"。
+     */
+    {
+      key: 'theme',
+      label: '界面主题',
+      iconPath:
+        'M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z',
+      children: [
+        { key: 'theme:light', label: themeName() === 'light' ? '浅色 ✓' : '浅色' },
+        { key: 'theme:dark', label: themeName() === 'dark' ? '深色 ✓' : '深色' },
+      ],
+    },
     { key: 'logout', label: '退出登录', iconPath: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9' },
   ],
   selectedKey: 'process',
@@ -910,6 +935,12 @@ const shell = mountShell({
     }
     if (key === 'reload') {
       handleAction('reload');
+      return;
+    }
+    if (key.indexOf('theme:') === 0) {
+      const next = key.replace('theme:', '') as 'light' | 'dark';
+      // 已经是这套主题就不要白刷一次（菜单项里的 ✓ 就是当前主题）
+      if (next !== themeName()) switchTheme(next);
       return;
     }
     if (key === 'logout') {

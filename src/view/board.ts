@@ -22,6 +22,7 @@ import { DISCHARGE_LIMIT_1A } from '../domain/water-quality';
 import type { CategoryMeta } from '../domain/symbol-catalog';
 import type { SludgeStage } from '../domain/sludge-manifest';
 import { HEALTH_DIMS } from '../domain/asset-registry';
+import { applyThemeToIce } from './theme';
 
 export type ChartHandle = {
   /** 图表实例；**按需加载完成前是 `null`**（调试 / e2e 要先等就绪，见 `ready`）。 */
@@ -81,6 +82,13 @@ export function mountChart(canvas: HTMLCanvasElement, buildOption: () => ChartOp
           return; // 期间被切走了：交给下一次 refresh 再建
         }
         chart = mod.createChart(canvas, buildOption(), { autoResize: true, renderMode: 'dirty-rect' });
+        /**
+         * 图表 `theme:'auto'` 的明暗 = **它自己那个引擎实例**的背景亮度（`ICEChart` 内部
+         * `this.ice = new ICE()`，还会订阅引擎主题变化自己重画）。所以建完图要把当前主题
+         * 打到它的实例上 —— 否则 option 传给它的 `auto` 只会解析成默认浅色，
+         * 症状就是"外壳深了，图表还是白的"。
+         */
+        if (chart.ice) applyThemeToIce(chart.ice);
         // 立刻按容器实测尺寸对齐一次：`createChart` 只按画布当前尺寸布图，
         // 而画布刚被塞进"岛"里时还是 300×150 的默认尺寸。容器不可见时 resize() 会自己跳过。
         if (typeof chart.resize === 'function') {
@@ -171,7 +179,7 @@ export function dailyTrendOption(
       text: '24 小时进出水趋势',
       subtext: `${meta.modeLabel} · 执行 ${meta.standard}`,
     },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     crosshair: { show: true, axis: 'x', showAxisLabel: true },
@@ -236,7 +244,7 @@ export function dailyTrendOption(
 export function symbolMixOption(stats: Array<CategoryMeta & { count: number }>): ChartOption {
   return {
     title: { text: '符号库构成', subtext: '按工艺分类计数' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: false },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },
@@ -264,7 +272,7 @@ export function symbolMixOption(stats: Array<CategoryMeta & { count: number }>):
 export function sludgeFlowOption(stages: SludgeStage[]): ChartOption {
   return {
     title: { text: '污泥流程', subtext: '湿泥量随含水率收缩 · 干泥量守恒' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },
@@ -297,7 +305,7 @@ export function assetHealthOption(
 ): ChartOption {
   return {
     title: { text: '健康度矩阵', subtext: '装置分类 × 五个维度（平均分）' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: false },
     tooltip: { trigger: 'item' },
     xAxis: { type: 'category', data: categories },
@@ -313,7 +321,7 @@ export function assetHealthOption(
 export function energyMixOption(mix: { names: string[]; energy: number[] }): ChartOption {
   return {
     title: { text: '能耗分项', subtext: '按「装机 × 负载系数」摊分全厂日耗电' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: false },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },
@@ -328,7 +336,7 @@ export function energyMixOption(mix: { names: string[]; energy: number[] }): Cha
 export function tariffOption(bands: { names: string[]; energy: number[]; prices: number[] }): ChartOption {
   return {
     title: { text: '峰谷分摊', subtext: '三档各 8 小时 · 谷 / 平 / 峰' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },
@@ -349,7 +357,7 @@ export function tariffOption(bands: { names: string[]; energy: number[]; prices:
 export function pumpCurveOption(curve: { speeds: number[]; efficiency: number[]; flow: number[] }): ChartOption {
   return {
     title: { text: '泵特性曲线', subtext: '相似定律：流量 ∝ n、扬程 ∝ n²、轴功率 ∝ n³' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },
@@ -375,7 +383,7 @@ export function sumpLevelOption(
   const percent = (value: number) => Math.round(value * 1000) / 10;
   return {
     title: { text: '集水井液位', subtext: '最近 60 分钟 · 液位占有效水深的百分比' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },
@@ -402,7 +410,7 @@ export function sumpLevelOption(
 export function drillCompareOption(compare: { names: string[]; before: number[]; after: number[] }): ChartOption {
   return {
     title: { text: '达标度对比', subtext: '100% = 正好压线 · 越高越有余量' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },
@@ -425,7 +433,7 @@ export function inspectionRouteOption(stats: {
 }): ChartOption {
   return {
     title: { text: '路线到位情况', subtext: '按巡检路线统计条数' },
-    theme: 'light',
+    theme: 'auto',
     legend: { show: true, position: 'top' },
     tooltip: { trigger: 'axis' },
     grid: { show: true, x: false, y: true },

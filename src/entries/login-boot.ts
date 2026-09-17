@@ -10,6 +10,19 @@
 import { mountLogin, readLoginUser, type LoginHandle } from '../view/login';
 import { measureCanvas } from '../view/shell';
 import { hideBootOverlayWhenPainted } from '../view/boot-overlay';
+import { installTheme } from '../view/theme';
+
+/**
+ * 装主题 —— **必须在这里、而且必须是本文件第一件跑的事**。
+ *
+ * 组件库的主题是构造期读一次（`ice-web-components/docs/guides/theming.md`），
+ * 而下面这几行马上就会构造登录门（`mountLogin`）。装晚了，登录门的 ICERect / ICEInput
+ * 就带着旧色被造出来，之后无论怎么 `setTheme` 都不会变 —— 症状是"选了深色，登录页还是白的"。
+ *
+ * 放在 `login-boot` 而不是 `boot.ts`：`boot.ts` 的 `import './login-boot'` 会被提升，
+ * 在它自己的模块体之前执行；而 login-boot 正是"第一次造 UI"的地方（首屏只加载它）。
+ */
+installTheme();
 
 const canvas = document.getElementById('canvas-login') as HTMLCanvasElement | null;
 if (!canvas) {
