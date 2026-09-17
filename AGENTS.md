@@ -95,12 +95,14 @@ ICE 家族的**应用侧样板**：把 `ice-render` / `ice-entity-designer` / `i
 守这条规则的是 `tests/view/pageConvention.test.ts`（文件命名 / 同名类继承 `WaterPage` /
 不许再出现 `buildXxxPage` 与 `refresh()`）。
 
-**还没接的一步**：页面本该在自己的 `onShow()` 里自更新（"显示"是宿主给的事件，见
-ice-web-components `docs/guides/layout.md` 第六节）。现在不行，两件事没就位：
-① 组件库的生命周期钩子还没发版（本地 workspace 的 dist 有，npm 上还没有）；
-② `recompute()` 挂在 `onPageShow` 上、在 `show()` **末尾**执行，显示发生时数据还是上一轮的。
-所以本页的更新仍由宿主在 `shell.refresh()` 路径上驱动。两件事都就位后，
-`WaterPage` 加 `onShow() { this.onUpdate(); }`、外壳去掉切页时的驱动即可。
+**关于 `onShow()` 自更新（2026-09-17 定论：不切）**：库的生命周期钩子已随
+`ice-web-components@1.13.0` 发版，但页面的更新**仍然由宿主在 `shell.refresh()` 路径上驱动**，
+理由是顺序：`shell.show()` 先切 `display`（这一刻触发页面的 `onShow()`），而业务 `recompute()`
+挂在 `onPageShow` 上、跑在 `show()` 的**末尾** —— 页面若在 `onShow()` 里自更新，拿到的是
+**上一轮**数据；把 `recompute()` 提前又会破坏 `onPageShow` 里依赖"页面已显示"的动作
+（`legendViewport.fitViewport()`）。
+所以"谁来触发更新"的答案是**宿主**：数据什么时候变新鲜只有宿主知道；`onShow()` 留给不需要
+预重算的宿主（库里已有，见 ice-web-components `docs/guides/layout.md` 第六节）。
 
 ## 新增业务模块的口径（改之前先看）
 
