@@ -74,6 +74,17 @@ export class DataPage extends WaterPage {
     return cardBodyRect(DataPage.boardCardRect(layout));
   }
 
+  /**
+   * 把控件放进卡片的正文区。
+   *
+   * 坐标基准是**卡片内相对坐标** —— 卡片自己已经在 rect 上了，这里再加一次 `rect.left`
+   * 会让控件整体跑出卡片（症状是"控件在画布外、点不到"）。
+   */
+  private static placeInCard(card: any, child: any): void {
+    child.setState({ left: CARD_INSET, top: 46 });
+    card.addChild(child, false);
+  }
+
   private readonly deps: DataPageDeps;
   private readonly loadTable: ICETable;
   private readonly complianceTable: ICETable;
@@ -165,17 +176,6 @@ export class DataPage extends WaterPage {
     this.addChild(this.auditBody, false);
     this.addChild(loadCard, false);
     this.addChild(complianceCard, false);
-  }
-
-  /**
-   * 把控件放进卡片的正文区。
-   *
-   * 坐标基准是**卡片内相对坐标** —— 卡片自己已经在 rect 上了，这里再加一次 `rect.left`
-   * 会让控件整体跑出卡片（症状是"控件在画布外、点不到"）。
-   */
-  private static placeInCard(card: any, child: any): void {
-    child.setState({ left: CARD_INSET, top: 46 });
-    card.addChild(child, false);
   }
 
   /** 本页的岛：24 小时看板挖在 `trend-card` 的正文区。 */

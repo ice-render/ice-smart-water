@@ -63,6 +63,20 @@ export class LegendPage extends WaterPage {
     return cardBodyRect(LegendPage.legendCardRect(layout));
   }
 
+  /** 介质代号 → 中文（词典来自设计器的水工艺域包） */
+  private static mediumLabelOf(medium: string): string {
+    const labels: Record<string, string> = {
+      sewage: '污水',
+      effluent: '出水',
+      recycle: '混合液回流',
+      returnSludge: '回流污泥',
+      sludge: '剩余污泥',
+      air: '空气',
+      chemical: '药剂',
+    };
+    return labels[medium] || medium;
+  }
+
   private readonly deps: LegendPageDeps;
   private readonly detailBody: ICEWidget;
   private readonly detailWidth: number;
@@ -190,20 +204,6 @@ export class LegendPage extends WaterPage {
     if (this.segmented.getValue() !== next) this.segmented.setValue(next);
     this.__renderDetail(null, matched);
     this.pageCtx.ice.dirty = true;
-  }
-
-  /** 介质代号 → 中文（词典来自设计器的水工艺域包） */
-  private static mediumLabelOf(medium: string): string {
-    const labels: Record<string, string> = {
-      sewage: '污水',
-      effluent: '出水',
-      recycle: '混合液回流',
-      returnSludge: '回流污泥',
-      sludge: '剩余污泥',
-      air: '空气',
-      chemical: '药剂',
-    };
-    return labels[medium] || medium;
   }
 
   private __renderDetail(entry: SymbolEntry | null, matched: number): void {
