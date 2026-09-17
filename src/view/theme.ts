@@ -27,7 +27,12 @@
  * `<html data-theme>` 打上标记，CSS 据此换底色。两处必须同一个 key、同一套解析，
  * 所以 `tests/view/theme.test.ts` 会读 index.html 把它们钉在一起（漂了会红）。
  */
-import { applyThemeToEngine, iceUIManager, type ICEThemeTokens } from 'ice-web-components';
+import {
+  applyThemeToCss,
+  applyThemeToEngine,
+  iceUIManager,
+  type ICEThemeTokens,
+} from 'ice-web-components';
 
 export type ThemeName = 'light' | 'dark';
 
@@ -79,6 +84,15 @@ export function installTheme(): ThemeName {
   installed = name;
   if (typeof document !== 'undefined') {
     document.documentElement.dataset.theme = name;
+    /**
+     * DOM 那半：把同一张 token 表写成 CSS 变量（`--ice-color-*` 等）。
+     *
+     * 启动遮罩的 CSS 因此不用再手抄色值 —— 它写的是
+     * `var(--ice-color-background, #212529)`：JS 跑起来之前用括号里的兜底色（head 的内联脚本
+     * 已经按 `?theme=` / localStorage 打过 `data-theme`，所以暗色用户开页不闪白），
+     * JS 跑起来之后就换成 token 表里的真值。**一份表两处用**，改 token 时两半一起变。
+     */
+    applyThemeToCss(document.documentElement);
   }
   if (new URLSearchParams(search).get('theme') !== null) {
     safeWriteStorage(name);
