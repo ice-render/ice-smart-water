@@ -46,6 +46,11 @@ export const PAGE_GAP = 18;
 /** 卡片正文的左右内缩与标题带高度（与 `card()` 的排版一致，岛就挖在这块空里） */
 export const CARD_INSET = 16;
 export const CARD_TITLE_BAND = 44;
+/**
+ * 快捷操作（FAB）的叠放钉子：页面是**懒加载后挂到同一个 ICE 顶层**的，
+ * 所以它的 `zIndex` 必须是显式正数（"永远浮在页面之上"），不能只靠 `bringToFront()`。
+ */
+export const FAB_Z_INDEX = 9000;
 
 export type Rect = { left: number; top: number; width: number; height: number };
 
@@ -706,7 +711,14 @@ export function mountShell(options: ShellOptions): ShellHandle {
     })),
   });
   attachTooltip(ice, fab, { title: '快捷操作', placement: 'left' });
-  raiseSubtree(fab, 9000);
+  /**
+   * 快捷按钮要**永远浮在页面之上**：页面是懒加载的，`show()` 里才 `ice.addChild(mounted.node)`
+   * 挂到同一个 ICE 顶层 —— 所以这里用**显式正数钉子**，不能用 `bringToFront()`
+   *（后者只保证"当前同层最上"，之后新挂的页面会盖住它）。
+   * 引擎 2026-09 起 `zIndex` 只在**兄弟之间**比较、子永远画在父之上，
+   * 所以只需要给这一层设值，不再需要（也曾经需要）递归整棵子树。
+   */
+  fab.setState({ zIndex: FAB_Z_INDEX, paramsDirty: false });
   ice.addChild(fab);
 
   // 悬停 / 焦点 / 无障碍：画布控件的三件套
@@ -756,21 +768,6 @@ export function avatarTextOf(name: string): string {
   if (!text) return 'SW';
   if (/^[\x20-\x7e]+$/.test(text)) return text.slice(0, 2).toUpperCase();
   return text.slice(0, 1);
-}
-
-/**
- * 把整棵子树抬到指定 zIndex。
- *
- * ⚠️ **历史遗留**：这套"整棵子树设成同一个 zIndex"的写法是引擎 2.13 之前为了绕开
- * "渲染队列全局按 zIndex 排序"（父容器后构造就会盖住自己的子树）才需要的手法。
- * 2.13 起绘制顺序是**树序 + 兄弟按 zIndex**，子永远画在父之上，这里只剩"把这一层排到兄弟里的最后"
- * 这一个作用 —— 等价于给这一层的节点设一个更大的 zIndex 即可，不再需要递归整棵子树。
- * 保留不动是为了不扰动既有版面；新代码别照抄。
- */
-export function raiseSubtree(node: any, z: number): void {
-  if (!node || !node.state) return;
-  node.state.zIndex = z;
-  (node.childNodes || []).forEach((child: any) => raiseSubtree(child, z));
 }
 
 /**
