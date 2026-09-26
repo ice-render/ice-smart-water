@@ -77,6 +77,8 @@ export class ProcessPage extends WaterPage {
     chemical: '药剂',
     signal: '信号',
     power: '动力',
+    backwash: '反冲洗水',
+    reclaimed: '中水回用',
   };
 
   /**

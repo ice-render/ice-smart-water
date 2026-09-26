@@ -153,7 +153,7 @@ test('整个系统只有一个 HTML：登录门之后是同一个壳，符号库
     canvases: Array.from(document.querySelectorAll('canvas')).map((c) => c.id),
   }));
   expect(entered.loginVisible).toBe(false);
-  expect(entered.total).toBe(31);
+  expect(entered.total).toBe(38);
   expect(entered.page).toBe('process');
   expect(entered.under).toBe('canvas-process');
   // 一张外壳画布 + 一张登录层 + 一张消息覆盖画布（在岛之上，顶部消息不被岛盖住）+ 十八个岛画布，
@@ -193,6 +193,6 @@ test('整个系统只有一个 HTML：登录门之后是同一个壳，符号库
   }));
   expect(legend.page).toBe('legend');
   expect(legend.under).toBe('canvas-legend');
-  expect(legend.cells).toBe(31);
+  expect(legend.cells).toBe(38);
   expect((page as any).__errors).toEqual([]);
 });
